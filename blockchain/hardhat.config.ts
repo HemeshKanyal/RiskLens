@@ -2,17 +2,27 @@ import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mo
 import hardhatEthers from "@nomicfoundation/hardhat-ethers";
 import { configVariable, defineConfig } from "hardhat/config";
 
-
-
 export default defineConfig({
   plugins: [hardhatToolboxMochaEthersPlugin, hardhatEthers],
   solidity: {
     profiles: {
       default: {
-        version: "0.8.20",
+        version: "0.8.27",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
       },
       production: {
-        version: "0.8.20",
+        version: "0.8.27",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
       },
     },
   },
