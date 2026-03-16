@@ -1,6 +1,19 @@
-node_modules
+node_modules/
+dist/
+coverage/
 .env
-target
-dist
-coverage
+.env.*
+target/
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
