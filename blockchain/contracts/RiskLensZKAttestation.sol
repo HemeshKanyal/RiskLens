@@ -1,58 +1,45 @@
-// SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.21;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-import "./RiskLensRiskVerifier.sol";
+interface IVerifier {
+    function verify(bytes calldata proof, bytes32[] calldata publicInputs)
+        external
+        view
+        returns (bool);
+}
 
 contract RiskLensZKAttestation {
+
+    IVerifier public verifier;
+
     struct Attestation {
+        address user;
+        bytes32 snapshotHash;
         bytes32 claimHash;
-        address prover;
-        uint64 attestedAt;
+        uint256 timestamp;
     }
 
-    // snapshotHash => attestation
-    mapping(bytes32 => Attestation) public attestations;
-
-    // Honk ZK verifier
-    HonkVerifier public immutable verifier;
-
-    event Attested(
-        bytes32 indexed snapshotHash,
-        bytes32 claimHash,
-        address indexed prover
-    );
+    mapping(address => Attestation) public attestations;
 
     constructor(address _verifier) {
-        require(_verifier != address(0), "Invalid verifier");
-        verifier = HonkVerifier(_verifier);
+        verifier = IVerifier(_verifier);
     }
 
     function attest(
-        bytes32 snapshotHash,
-        bytes32 claimHash,
-        bytes calldata proof
+        bytes calldata proof,
+        bytes32[] calldata publicInputs
     ) external {
-        require(
-            attestations[snapshotHash].attestedAt == 0,
-            "Already attested"
-        );
 
-        // ✅ DECLARE AND ALLOCATE public inputs (THIS WAS MISSING)
-        bytes32[] memory publicInputs = new bytes32[](2);
+        require(publicInputs.length == 2, "Invalid public inputs");
 
-        publicInputs[0] = snapshotHash;
-        publicInputs[1] = claimHash;
-        // remaining inputs are zero-padded automatically
+        bool valid = verifier.verify(proof, publicInputs);
+        require(valid, "Invalid proof");
 
-        bool ok = verifier.verify(proof, publicInputs);
-        require(ok, "Invalid ZK proof");
-
-        attestations[snapshotHash] = Attestation({
-            claimHash: claimHash,
-            prover: msg.sender,
-            attestedAt: uint64(block.timestamp)
+        attestations[msg.sender] = Attestation({
+            user: msg.sender,
+            snapshotHash: publicInputs[0],
+            claimHash: publicInputs[1],
+            timestamp: block.timestamp
         });
-
-        emit Attested(snapshotHash, claimHash, msg.sender);
     }
 }

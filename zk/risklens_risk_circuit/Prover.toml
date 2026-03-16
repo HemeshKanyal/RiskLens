@@ -1,5 +1,7 @@
-balances = ["10", "20", "30"]
-claim_hash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-prices = ["2", "3", "4"]
-snapshot_hash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-threshold = "80"
+snapshot_hash = "12345"
+claim_hash = "67890"
+
+balances = ["10","20","30"]
+prices = ["2","3","4"]
+
+threshold = "90"
