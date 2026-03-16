@@ -7,3 +7,5 @@ pymongo
 motor
 python-dotenv
 requests
+google-generativeai
+web3
