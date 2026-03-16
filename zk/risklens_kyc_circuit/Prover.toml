@@ -1,0 +1,7 @@
+age = "25"
+country_code = "10"
+kyc_status = "1"
+identity_commitment = "12345"
+
+claim_hash = "12345"
+identity_commitment_hash = "12345"
