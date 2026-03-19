@@ -1,36 +1,14 @@
-import subprocess
 import os
 
 def generate_zk_proof(snapshot_hash):
 
-    zk_dir = "../zk/risklens_risk_circuit"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    try:
+    zk_dir = os.path.join(base_dir, "..", "zk", "risklens_risk_circuit")
 
-        subprocess.run(
-            [
-                "bb",
-                "prove",
-                "-b", "target/risklens_risk_circuit.json",
-                "-w", "target/risklens_risk_circuit.gz",
-                "-k", "vk/vk",
-                "-o", "proof"
-            ],
-            cwd=zk_dir,
-            check=True
-        )
+    proof_path = os.path.join(zk_dir, "proof", "proof")
 
-        proof_path = os.path.join(
-            zk_dir,
-            "proof/proof"
-        )
+    with open(proof_path, "rb") as f:
+        proof = f.read()
 
-        with open(proof_path) as f:
-            proof = f.read().strip()
-
-        return proof
-
-    except Exception as e:
-
-        print("ZK ERROR:", e)
-        return None
+    return proof.hex()
