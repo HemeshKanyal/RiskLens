@@ -7,5 +7,6 @@ pymongo
 motor
 python-dotenv
 requests
-google-generativeai
+# google-generativeai
+google-genai
 web3

@@ -1,8 +1,4 @@
-import google.generativeai as genai
-import os
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-model = genai.GenerativeModel("gemini-1.5-flash")
+import requests
 
 def generate_llm_explanation(ai_result):
 
@@ -18,9 +14,17 @@ Give clear insights and suggestions.
 """
 
     try:
-        response = model.generate_content(prompt)
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama3.1:8b",
+                "prompt": prompt,
+                "stream": False
+            }
+        )
 
-        return response.text
+        result = response.json()
+        return result["response"]
 
     except Exception as e:
         return f"LLM generation failed: {str(e)}"
