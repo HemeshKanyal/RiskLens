@@ -1,9 +1,11 @@
 from fastapi import FastAPI
-from models import PortfolioRequest
+from models import PortfolioRequest, KYCRequest
 from ai_service import run_ai_analysis
 from llm_service import generate_llm_explanation
 from zk_service import generate_zk_proof
+from zk_kyc_service import generate_kyc_proof
 from blockchain_service import submit_attestation
+from blockchain_kyc_service import submit_kyc_verification
 
 import hashlib
 import json
@@ -48,6 +50,30 @@ def analyze_portfolio(request: PortfolioRequest):
         "llm_explanation": explanation,
         "snapshot_hash": snapshot_hash,
         "claim_hash": claim_hash,
+        "zk_proof": proof,
+        "public_inputs": public_inputs,
+        "blockchain_tx": tx_hash
+    }
+
+
+@app.post("/verify-kyc")
+def verify_kyc(request: KYCRequest):
+
+    # Step 1 — Generate ZK proof from user's KYC data
+    proof, public_inputs, identity_hash = generate_kyc_proof(
+        full_name=request.full_name,
+        date_of_birth=request.date_of_birth,
+        country_code=request.country_code,
+        document_id=request.document_id,
+        age=request.age
+    )
+
+    # Step 2 — Submit proof to RiskLensZKKYC contract on-chain
+    tx_hash = submit_kyc_verification(proof, public_inputs)
+
+    return {
+        "status": "KYC verified on-chain",
+        "identity_commitment_hash": identity_hash,
         "zk_proof": proof,
         "public_inputs": public_inputs,
         "blockchain_tx": tx_hash
