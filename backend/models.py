@@ -16,3 +16,11 @@ class PortfolioRequest(BaseModel):
 class AnalysisResponse(BaseModel):
     ai_analysis: dict
     llm_explanation: str
+
+
+class KYCRequest(BaseModel):
+    full_name: str
+    date_of_birth: str        # "YYYY-MM-DD"
+    country_code: int          # numeric code (avoid 1,2,3 which are blacklisted)
+    document_id: str           # passport / national ID number
+    age: int
