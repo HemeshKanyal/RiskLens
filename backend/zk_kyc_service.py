@@ -2,7 +2,8 @@ import subprocess
 import os
 import hashlib
 
-FIELD_MODULUS = 2**254
+# Exact BN254 scalar field modulus used by Noir/Barretenberg
+FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 
 def generate_kyc_proof(full_name: str, date_of_birth: str, country_code: int, document_id: str, age: int):
