@@ -1,0 +1,60 @@
+RiskLens
+AI-Driven Portfolio Intelligence Platform with Blockchain Proof
+
+1. Project Overview
+RiskLens is a web-based portfolio intelligence and risk analysis platform designed to help individual investors
+aggregate multi-asset portfolios, analyze risk and concentration, receive explainable rebalancing
+recommendations, and cryptographically prove portfolio history using blockchain technology. The system is strictly
+read-only and does not execute trades or handle user funds.
+
+2. Problem Statement
+Investors often spread their investments across multiple asset classes such as stocks, ETFs, mutual funds,
+cryptocurrencies, and commodities. These investments are usually distributed across different platforms, making it
+difficult to understand overall portfolio risk, detect overexposure, and make disciplined rebalancing decisions.
+RiskLens addresses this gap by providing portfolio-level intelligence and transparency.
+
+3. MVP Scope (Frozen)
+The MVP supports manual portfolio creation, multi-asset tracking, portfolio risk analysis, diversification scoring,
+rebalancing recommendations, explainable insights, and blockchain-based portfolio proof. It explicitly excludes
+trading, broker integrations, automated execution, machine learning model training, and financial advisory
+guarantees.
+
+4. Target Users
+Primary users are individual retail investors with diversified investments. Future users may include financial
+advisors, analysts, and auditors.
+
+5. System Architecture
+RiskLens follows a layered architecture consisting of a web frontend, FastAPI backend, AI intelligence engine,
+MongoDB database, and a blockchain proof layer. Each layer has clearly defined responsibilities and strict
+boundaries.
+
+6. Technology Stack
+Frontend: Next.js, React, Tailwind CSS, Recharts, Ethers.js Backend: FastAPI (Python), JWT authentication
+Database: MongoDB AI Layer: Python, Pandas, NumPy (rule-based and statistical logic) Blockchain: Solidity,
+Polygon/Ethereum testnet, Hardhat APIs: CoinGecko, Yahoo Finance / Alpha Vantage
+
+7. Core Functional Modules
+User Authentication, Portfolio Management, Pricing Engine, AI Risk & Allocation Engine, Decision Logging
+System, and Blockchain Proof Service.
+
+8. End-to-End Flow
+When a user updates a portfolio, the backend stores the data, generates a snapshot hash, writes the hash to the
+blockchain, triggers AI analysis, logs the decision, and returns explainable insights to the frontend.
+
+9. AI Evolution Roadmap
+Phase 1 uses deterministic rules and statistics. Phase 2 introduces learning from historical market data. Phase 3
+incorporates learning from user decisions, while always keeping humans in control.
+
+10. Security & Ethics
+RiskLens is a read-only system with no fund custody, no trade execution, transparent decision logic, explainable
+AI, and privacy-first data handling.
+
+11. MVP Success Criteria
+The MVP is complete when users can add portfolios, view risk and diversification insights, receive rebalancing
+recommendations, and verify portfolio history on the blockchain.
+
+12. Final Definition
+RiskLens is a portfolio intelligence platform that focuses on risk-aware decision support and transparency, rather
+than trading or speculative prediction.
+
+

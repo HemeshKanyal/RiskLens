@@ -1,7 +1,8 @@
 import subprocess
 import os
 
-FIELD_MODULUS = 2**254
+# Exact BN254 scalar field modulus used by Noir/Barretenberg
+FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 
 def generate_zk_proof(snapshot_hash, claim_hash):
