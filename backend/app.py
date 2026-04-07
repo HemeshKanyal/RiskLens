@@ -9,9 +9,11 @@ from zk_service import generate_zk_proof
 from zk_kyc_service import generate_kyc_proof
 from blockchain_service import submit_attestation
 from blockchain_kyc_service import submit_kyc_verification
+from pricing_service import get_asset_price, get_bulk_prices
 
 import hashlib
 import json
+from datetime import datetime
 
 app = FastAPI(title="RiskLens Backend")
 
@@ -86,17 +88,49 @@ def home():
 
 
 @app.post("/analyze")
-def analyze_portfolio(request: PortfolioRequest, current_user: UserResponse = Depends(auth.get_current_user)):
+async def analyze_portfolio(request: PortfolioRequest, current_user: UserResponse = Depends(auth.get_current_user)):
 
-    portfolio_dict = {
-        "assets": [asset.dict() for asset in request.assets]
-    }
+    # Step 0 — Resolve live prices for assets missing a value
+    resolved_assets = []
+    live_prices_used = {}
+
+    for asset in request.assets:
+        asset_data = asset.dict()
+
+        if asset_data.get("value") is None:
+            # No value provided — fetch live price
+            if asset_data.get("quantity") is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Asset '{asset_data['symbol']}' must have either 'value' or 'quantity' specified."
+                )
+
+            live_price = get_asset_price(asset_data["symbol"], asset_data["type"])
+            if live_price is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not fetch live price for '{asset_data['symbol']}'. Please provide 'value' manually."
+                )
+
+            asset_data["value"] = round(live_price * asset_data["quantity"], 2)
+            live_prices_used[asset_data["symbol"]] = live_price
+            print(f"💰 {asset_data['symbol']}: ${live_price} × {asset_data['quantity']} = ${asset_data['value']}")
+
+        resolved_assets.append(asset_data)
+
+    portfolio_dict = {"assets": resolved_assets}
 
     # Step 1 — AI analysis
-    ai_result = run_ai_analysis(portfolio_dict, request.risk_profile)
+    try:
+        ai_result = run_ai_analysis(portfolio_dict, request.risk_profile)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"AI analysis failed: {str(e)}")
 
     # Step 2 — LLM explanation
-    explanation = generate_llm_explanation(ai_result)
+    try:
+        explanation = generate_llm_explanation(ai_result)
+    except Exception:
+        explanation = "LLM explanation unavailable at the moment."
 
     # Step 3 — snapshot hash
     snapshot_string = json.dumps(portfolio_dict)
@@ -107,41 +141,173 @@ def analyze_portfolio(request: PortfolioRequest, current_user: UserResponse = De
     claim_hash = hashlib.sha256(claim_string.encode()).hexdigest()
 
     # Step 5 — ZK proof
-    proof, public_inputs = generate_zk_proof(snapshot_hash, claim_hash)
+    try:
+        proof, public_inputs = generate_zk_proof(snapshot_hash, claim_hash)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ZK proof generation failed: {str(e)}")
 
-    # Step 6 — blockchain attestation
-    tx_hash = submit_attestation(proof, public_inputs)
+    # Step 6 — blockchain attestation (graceful — save results even if chain fails)
+    tx_hash = None
+    blockchain_error = None
+    try:
+        tx_hash = submit_attestation(proof, public_inputs)
+    except Exception as e:
+        blockchain_error = str(e)
+        print(f"⚠️ Blockchain attestation failed: {blockchain_error}")
 
-    return {
+    # Step 7 — Save portfolio snapshot to MongoDB (always save)
+    portfolios_collection = database.get_portfolios_collection()
+    portfolio_record = {
+        "user_email": current_user.email,
+        "assets": portfolio_dict["assets"],
+        "risk_profile": request.risk_profile,
+        "snapshot_hash": snapshot_hash,
+        "blockchain_tx": tx_hash,
+        "blockchain_status": "confirmed" if tx_hash else "failed",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    await portfolios_collection.insert_one(portfolio_record)
+
+    # Step 8 — Save AI decision log to MongoDB (always save)
+    decisions_collection = database.get_decisions_collection()
+    decision_record = {
+        "user_email": current_user.email,
+        "action": "portfolio_analysis",
+        "snapshot_hash": snapshot_hash,
+        "claim_hash": claim_hash,
+        "ai_analysis": ai_result,
+        "llm_explanation": explanation,
+        "blockchain_tx": tx_hash,
+        "blockchain_status": "confirmed" if tx_hash else "failed",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    await decisions_collection.insert_one(decision_record)
+
+    print(f"📦 Portfolio & decision saved for {current_user.email}")
+
+    response = {
         "ai_analysis": ai_result,
         "llm_explanation": explanation,
         "snapshot_hash": snapshot_hash,
         "claim_hash": claim_hash,
         "zk_proof": proof,
         "public_inputs": public_inputs,
-        "blockchain_tx": tx_hash
+        "blockchain_tx": tx_hash,
+        "blockchain_status": "confirmed" if tx_hash else "failed"
     }
+
+    if live_prices_used:
+        response["live_prices_used"] = live_prices_used
+
+    if blockchain_error:
+        response["blockchain_warning"] = f"Proof is valid but on-chain submission failed: {blockchain_error}"
+
+    return response
 
 
 @app.post("/verify-kyc")
-def verify_kyc(request: KYCRequest, current_user: UserResponse = Depends(auth.get_current_user)):
+async def verify_kyc(request: KYCRequest, current_user: UserResponse = Depends(auth.get_current_user)):
 
     # Step 1 — Generate ZK proof from user's KYC data
-    proof, public_inputs, identity_hash = generate_kyc_proof(
-        full_name=request.full_name,
-        date_of_birth=request.date_of_birth,
-        country_code=request.country_code,
-        document_id=request.document_id,
-        age=request.age
+    try:
+        proof, public_inputs, identity_hash = generate_kyc_proof(
+            full_name=request.full_name,
+            date_of_birth=request.date_of_birth,
+            country_code=request.country_code,
+            document_id=request.document_id,
+            age=request.age
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"KYC ZK proof generation failed: {str(e)}")
+
+    # Step 2 — Submit proof to RiskLensZKKYC contract on-chain (graceful)
+    tx_hash = None
+    blockchain_error = None
+    try:
+        tx_hash = submit_kyc_verification(proof, public_inputs)
+    except Exception as e:
+        blockchain_error = str(e)
+        print(f"⚠️ KYC blockchain submission failed: {blockchain_error}")
+
+    # Step 3 — Save KYC decision log to MongoDB (always save)
+    decisions_collection = database.get_decisions_collection()
+    kyc_record = {
+        "user_email": current_user.email,
+        "action": "kyc_verification",
+        "identity_commitment_hash": identity_hash,
+        "blockchain_tx": tx_hash,
+        "blockchain_status": "confirmed" if tx_hash else "failed",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    await decisions_collection.insert_one(kyc_record)
+
+    # Step 4 — Mark user as KYC verified in users collection
+    users_collection = database.get_users_collection()
+    await users_collection.update_one(
+        {"email": current_user.email},
+        {"$set": {"kyc_verified": True if tx_hash else False, "kyc_tx": tx_hash}}
     )
 
-    # Step 2 — Submit proof to RiskLensZKKYC contract on-chain
-    tx_hash = submit_kyc_verification(proof, public_inputs)
+    print(f"✅ KYC decision saved for {current_user.email}")
 
-    return {
-        "status": "KYC verified on-chain",
+    response = {
+        "status": "KYC verified on-chain" if tx_hash else "KYC proof valid but chain submission failed",
         "identity_commitment_hash": identity_hash,
         "zk_proof": proof,
         "public_inputs": public_inputs,
-        "blockchain_tx": tx_hash
+        "blockchain_tx": tx_hash,
+        "blockchain_status": "confirmed" if tx_hash else "failed"
     }
+
+    if blockchain_error:
+        response["blockchain_warning"] = f"Proof is valid but on-chain submission failed: {blockchain_error}"
+
+    return response
+
+
+# --- History Endpoints ---
+
+@app.get("/portfolio/history")
+async def get_portfolio_history(current_user: UserResponse = Depends(auth.get_current_user)):
+    """Fetch all saved portfolio snapshots for the logged-in user."""
+    portfolios_collection = database.get_portfolios_collection()
+    cursor = portfolios_collection.find(
+        {"user_email": current_user.email},
+        {"_id": 0}  # exclude MongoDB internal _id
+    ).sort("created_at", -1)
+    results = await cursor.to_list(length=100)
+    return {"portfolios": results, "count": len(results)}
+
+@app.get("/decisions")
+async def get_decision_logs(current_user: UserResponse = Depends(auth.get_current_user)):
+    """Fetch all AI decision logs for the logged-in user."""
+    decisions_collection = database.get_decisions_collection()
+    cursor = decisions_collection.find(
+        {"user_email": current_user.email},
+        {"_id": 0}
+    ).sort("created_at", -1)
+    results = await cursor.to_list(length=100)
+    return {"decisions": results, "count": len(results)}
+
+
+# --- Pricing Endpoints ---
+
+@app.get("/prices")
+def lookup_prices(symbols: str, types: str):
+    """
+    Fetch live USD prices for assets.
+    
+    Query params:
+      - symbols: comma-separated list (e.g. "BTC,AAPL,Gold")
+      - types:   comma-separated list (e.g. "crypto,stock,commodity")
+    """
+    symbol_list = [s.strip() for s in symbols.split(",")]
+    type_list = [t.strip() for t in types.split(",")]
+
+    if len(symbol_list) != len(type_list):
+        raise HTTPException(status_code=400, detail="'symbols' and 'types' must have the same number of items.")
+
+    items = [{"symbol": s, "type": t} for s, t in zip(symbol_list, type_list)]
+    prices = get_bulk_prices(items)
+
+    return {"prices": prices}

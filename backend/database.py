@@ -28,3 +28,6 @@ def get_users_collection():
 
 def get_portfolios_collection():
     return get_db()["portfolios"]
+
+def get_decisions_collection():
+    return get_db()["decision_logs"]
