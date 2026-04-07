@@ -130,7 +130,7 @@ def submit_kyc_verification(proof: str, public_inputs: str):
             "from": account,
             "nonce": nonce,
             "gas": gas_estimate + 500000,
-            "gasPrice": w3.to_wei("1", "gwei")
+            "gasPrice": w3.to_wei("10", "gwei")
         })
 
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
