@@ -1,11 +1,12 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 class Asset(BaseModel):
     symbol: str
     type: str
-    value: float
+    value: Optional[float] = None       # if omitted, auto-calculated from live price × quantity
+    quantity: Optional[float] = None     # number of units held (e.g. 2.5 BTC, 100 shares of AAPL)
 
 
 class PortfolioRequest(BaseModel):
