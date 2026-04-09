@@ -11,3 +11,6 @@ google-genai
 web3
 google-auth
 python-multipart
+yfinance
+pandas
+numpy

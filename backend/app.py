@@ -286,9 +286,9 @@ async def analyze_portfolio(request: PortfolioRequest, current_user: UserRespons
 
     portfolio_dict = {"assets": resolved_assets}
 
-    # Step 1 — AI analysis
+    # Step 1 — AI analysis (Phase 2)
     try:
-        ai_result = run_ai_analysis(portfolio_dict, request.risk_profile)
+        ai_result = run_ai_analysis(portfolio_dict, request.risk_profile, request.lookback_days)
     except Exception as e:
         logger.error("AI analysis failed: %s", str(e))
         raise HTTPException(status_code=400, detail=f"AI analysis failed: {str(e)}")
