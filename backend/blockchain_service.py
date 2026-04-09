@@ -1,18 +1,28 @@
 from web3 import Web3
 import json
 import os
+import logging
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logger = logging.getLogger("risklens.blockchain")
 
 # ==============================
-# CONFIG (EDIT THESE)
+# CONFIG (loaded from .env)
 # ==============================
 
-RPC_URL = "https://eth-sepolia.g.alchemy.com/v2/JzLs_sIi2ruO694q7uqsK"
-PRIVATE_KEY = "41d3ba410a6ca9b53504aceb915acaef68f3d36201d43c00f650cf72e31ac97d"
-ACCOUNT_ADDRESS = "0x623B2a013d804253101A0b1679315c677427AFd1"
-CONTRACT_ADDRESS = "0x1ed23479aaccf270fCEaef4Ab74A07385e707608"
+RPC_URL = os.getenv("RPC_URL")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+ACCOUNT_ADDRESS = os.getenv("ACCOUNT_ADDRESS")
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
+
+if not all([RPC_URL, PRIVATE_KEY, ACCOUNT_ADDRESS, CONTRACT_ADDRESS]):
+    raise RuntimeError("Missing blockchain config in .env — need RPC_URL, PRIVATE_KEY, ACCOUNT_ADDRESS, CONTRACT_ADDRESS")
 
 # Load ABI (make sure path is correct)
-with open("../blockchain/artifacts/contracts/RiskLensZKAttestation.sol/RiskLensZKAttestation.json") as f:
+abi_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "blockchain", "artifacts", "contracts", "RiskLensZKAttestation.sol", "RiskLensZKAttestation.json")
+with open(abi_path) as f:
     CONTRACT_JSON = json.load(f)
     CONTRACT_ABI = CONTRACT_JSON["abi"]
 
@@ -20,7 +30,7 @@ with open("../blockchain/artifacts/contracts/RiskLensZKAttestation.sol/RiskLensZ
 # WEB3 SETUP
 # ==============================
 
-w3 = Web3(Web3.HTTPProvider(RPC_URL))
+w3 = Web3(Web3.HTTPProvider(RPC_URL, request_kwargs={"timeout": 120}))
 account = w3.to_checksum_address(ACCOUNT_ADDRESS)
 
 contract = w3.eth.contract(
@@ -38,7 +48,7 @@ def split_public_inputs(public_inputs_hex: str):
 
     if len(public_inputs_hex) != 128:
         raise Exception(
-            f"❌ PUBLIC INPUTS WRONG LENGTH: {len(public_inputs_hex)} (expected 128)"
+            f"PUBLIC INPUTS WRONG LENGTH: {len(public_inputs_hex)} (expected 128)"
         )
     # Each bytes32 = 64 hex chars
     chunks = [
@@ -59,24 +69,20 @@ def submit_attestation(proof: str, public_inputs: str):
         if not proof.startswith("0x"):
             proof = "0x" + proof
 
-        print("\n🚀 FINAL DATA SENT TO CONTRACT")
-        print("Public Inputs (Python):", public_inputs_array)
-
-        # Optional (just for you)
-        import json
-        print("Public Inputs (JSON view):", json.dumps(public_inputs_array))
+        logger.info("Submitting attestation to blockchain")
+        logger.debug("Public Inputs: %s", json.dumps(public_inputs_array))
 
         nonce = w3.eth.get_transaction_count(account)
 
-        # 🧪 TEST FIRST (VERY IMPORTANT)
+        # Dry-run call to validate proof before sending tx
         contract.functions.attest(
             proof,
             public_inputs_array
         ).call()
 
-        print("✅ CALL SUCCESS — Proof is valid")
+        logger.info("Dry-run call succeeded — proof is valid")
 
-        # 🔥 Step 1: Estimate gas
+        # Estimate gas
         gas_estimate = contract.functions.attest(
             proof,
             public_inputs_array
@@ -84,9 +90,9 @@ def submit_attestation(proof: str, public_inputs: str):
             "from": account
         })
 
-        print("⛽ Estimated Gas:", gas_estimate)
+        logger.info("Estimated gas: %d", gas_estimate)
 
-        # 🔥 Step 2: Build transaction using estimated gas
+        # Build and send transaction
         tx = contract.functions.attest(
             proof,
             public_inputs_array
@@ -100,8 +106,9 @@ def submit_attestation(proof: str, public_inputs: str):
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
+        logger.info("Attestation tx submitted: %s", tx_hash.hex())
         return tx_hash.hex()
 
     except Exception as e:
-        print("❌ Blockchain Error:", str(e))
+        logger.error("Blockchain attestation error: %s", str(e))
         raise

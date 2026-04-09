@@ -1,17 +1,24 @@
 from web3 import Web3
 import json
 import os
+import logging
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logger = logging.getLogger("risklens.blockchain_kyc")
 
 # ==============================
-# CONFIG
+# CONFIG (loaded from .env)
 # ==============================
 
-RPC_URL = "https://eth-sepolia.g.alchemy.com/v2/JzLs_sIi2ruO694q7uqsK"
-PRIVATE_KEY = "41d3ba410a6ca9b53504aceb915acaef68f3d36201d43c00f650cf72e31ac97d"
-ACCOUNT_ADDRESS = "0x623B2a013d804253101A0b1679315c677427AFd1"
+RPC_URL = os.getenv("RPC_URL")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+ACCOUNT_ADDRESS = os.getenv("ACCOUNT_ADDRESS")
+KYC_CONTRACT_ADDRESS = os.getenv("KYC_CONTRACT_ADDRESS")
 
-# RiskLensZKKYC contract (deployed on Sepolia via Remix)
-KYC_CONTRACT_ADDRESS = "0x72b3e0d8264d42b219A54D52694e26235E664E35"
+if not all([RPC_URL, PRIVATE_KEY, ACCOUNT_ADDRESS, KYC_CONTRACT_ADDRESS]):
+    raise RuntimeError("Missing KYC blockchain config in .env — need RPC_URL, PRIVATE_KEY, ACCOUNT_ADDRESS, KYC_CONTRACT_ADDRESS")
 
 # ABI for RiskLensZKKYC (from Remix deployment)
 KYC_CONTRACT_ABI = [
@@ -76,7 +83,7 @@ def split_kyc_public_inputs(public_inputs_hex: str):
 
     if len(public_inputs_hex) != 128:
         raise Exception(
-            f"❌ KYC PUBLIC INPUTS WRONG LENGTH: {len(public_inputs_hex)} (expected 128)"
+            f"KYC PUBLIC INPUTS WRONG LENGTH: {len(public_inputs_hex)} (expected 128)"
         )
 
     # Each bytes32 = 64 hex chars → 2 public inputs
@@ -98,21 +105,20 @@ def submit_kyc_verification(proof: str, public_inputs: str):
         if not proof.startswith("0x"):
             proof = "0x" + proof
 
-        print("\n🚀 KYC — FINAL DATA SENT TO CONTRACT")
-        print("Public Inputs (Python):", public_inputs_array)
-        print("Public Inputs (JSON view):", json.dumps(public_inputs_array))
+        logger.info("Submitting KYC verification to blockchain")
+        logger.debug("KYC Public Inputs: %s", json.dumps(public_inputs_array))
 
         nonce = w3.eth.get_transaction_count(account)
 
-        # 🧪 Test call first (dry run) — validates the proof on-chain
+        # Dry-run call to validate proof on-chain
         kyc_contract.functions.verifyKYC(
             proof,
             public_inputs_array
         ).call({"from": account})
 
-        print("✅ KYC CALL SUCCESS — Proof is valid")
+        logger.info("KYC dry-run call succeeded — proof is valid")
 
-        # 🔥 Estimate gas
+        # Estimate gas
         gas_estimate = kyc_contract.functions.verifyKYC(
             proof,
             public_inputs_array
@@ -120,9 +126,9 @@ def submit_kyc_verification(proof: str, public_inputs: str):
             "from": account
         })
 
-        print("⛽ KYC Estimated Gas:", gas_estimate)
+        logger.info("KYC estimated gas: %d", gas_estimate)
 
-        # 🔥 Build and send transaction
+        # Build and send transaction
         tx = kyc_contract.functions.verifyKYC(
             proof,
             public_inputs_array
@@ -136,8 +142,9 @@ def submit_kyc_verification(proof: str, public_inputs: str):
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
+        logger.info("KYC verification tx submitted: %s", tx_hash.hex())
         return tx_hash.hex()
 
     except Exception as e:
-        print("❌ KYC Blockchain Error:", str(e))
+        logger.error("KYC blockchain error: %s", str(e))
         raise
