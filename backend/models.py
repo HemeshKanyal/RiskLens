@@ -12,6 +12,7 @@ class Asset(BaseModel):
 class PortfolioRequest(BaseModel):
     assets: List[Asset]
     risk_profile: str = "balanced"
+    lookback_days: int = 90
 
 
 class AnalysisResponse(BaseModel):
