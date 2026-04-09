@@ -1,4 +1,7 @@
 import requests
+import logging
+
+logger = logging.getLogger("risklens.pricing")
 
 # ========================================
 # CoinGecko — Crypto Prices (Free, no key)
@@ -45,9 +48,12 @@ def get_crypto_price(symbol: str) -> float | None:
             timeout=10
         )
         data = resp.json()
-        return data.get(coin_id, {}).get("usd")
+        price = data.get(coin_id, {}).get("usd")
+        if price:
+            logger.info("CoinGecko price for %s: $%.2f", symbol, price)
+        return price
     except Exception as e:
-        print(f"⚠️ CoinGecko fetch failed for {symbol}: {e}")
+        logger.warning("CoinGecko fetch failed for %s: %s", symbol, e)
         return None
 
 
@@ -87,9 +93,11 @@ def get_stock_price(symbol: str) -> float | None:
         data = resp.json()
         result = data["chart"]["result"][0]
         price = result["meta"]["regularMarketPrice"]
-        return round(float(price), 2)
+        price = round(float(price), 2)
+        logger.info("Yahoo Finance price for %s: $%.2f", symbol, price)
+        return price
     except Exception as e:
-        print(f"⚠️ Yahoo Finance fetch failed for {symbol}: {e}")
+        logger.warning("Yahoo Finance fetch failed for %s: %s", symbol, e)
         return None
 
 
