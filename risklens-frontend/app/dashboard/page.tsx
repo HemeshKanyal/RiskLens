@@ -1,9 +1,58 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import MetricCard from "@/components/dashboard/MetricCard";
 import AllocationChart from "@/components/dashboard/AllocationChart";
 import AIInsightCard from "@/components/dashboard/AIInsightCard";
 import PortfolioList from "@/components/dashboard/PortfolioList";
+import { getPortfolioHistory, getDecisionLogs } from "@/lib/api";
+import type { PortfolioSnapshot, DecisionLog } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
+import { DollarSign, TrendingUp, ShieldCheck, Plus } from "lucide-react";
+import Link from "next/link";
 
 export default function DashboardPage() {
+    const [portfolios, setPortfolios] = useState<PortfolioSnapshot[]>([]);
+    const [decisions, setDecisions] = useState<DecisionLog[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        async function loadData() {
+            try {
+                const [pRes, dRes] = await Promise.all([
+                    getPortfolioHistory(),
+                    getDecisionLogs(),
+                ]);
+                setPortfolios(pRes.portfolios);
+                setDecisions(dRes.decisions);
+            } catch (error) {
+                console.error("Failed to load dashboard data:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadData();
+    }, []);
+
+    // Compute metrics from real data
+    const latestPortfolio = portfolios[0];
+    const totalValue = latestPortfolio
+        ? latestPortfolio.assets.reduce((sum, a) => sum + (a.value || 0), 0)
+        : 0;
+
+    // Get latest decision with AI analysis
+    const latestAnalysis = decisions.find(
+        (d) => d.action === "portfolio_analysis" && d.ai_analysis
+    );
+    const riskScore =
+        (latestAnalysis?.ai_analysis as Record<string, unknown>)?.risk as Record<string, unknown> | undefined;
+    const healthScore = riskScore
+        ? Math.round(((5 - (riskScore.risk_score as number)) / 5) * 100)
+        : null;
+    const riskLevel = riskScore?.risk_level as string | undefined;
+
+    const hasData = portfolios.length > 0;
+
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             {/* Page Header */}
@@ -13,14 +62,19 @@ export default function DashboardPage() {
                         Dashboard
                     </h1>
                     <p className="text-sm text-gray-500 mt-1">
-                        Your portfolio overview and AI insights
+                        {hasData
+                            ? "Your portfolio overview and AI insights"
+                            : "Get started by adding your first portfolio"}
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        Markets Open
-                    </div>
+                    <Link
+                        href="/dashboard/portfolio"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-sm font-medium text-white hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2"
+                    >
+                        <Plus className="w-4 h-4" />
+                        New Analysis
+                    </Link>
                 </div>
             </div>
 
@@ -28,47 +82,77 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <MetricCard
                     label="Total Portfolio Value"
-                    value="$1,284,520"
-                    change="+5.4% from last month"
-                    changeType="positive"
-                    icon={
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
+                    value={hasData ? formatCurrency(totalValue) : "—"}
+                    change={
+                        hasData
+                            ? `${portfolios.length} snapshot${portfolios.length > 1 ? "s" : ""} recorded`
+                            : "No data yet"
                     }
+                    changeType="neutral"
+                    isLoading={isLoading}
+                    icon={<DollarSign className="w-5 h-5" />}
                 />
                 <MetricCard
-                    label="Total Profit / Loss"
-                    value="+$42,380"
-                    change="+3.4% this quarter"
-                    changeType="positive"
-                    icon={
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
-                        </svg>
+                    label="Analyses Run"
+                    value={
+                        hasData
+                            ? String(
+                                  decisions.filter(
+                                      (d) => d.action === "portfolio_analysis"
+                                  ).length
+                              )
+                            : "0"
                     }
+                    change={
+                        hasData
+                            ? `${decisions.filter((d) => d.blockchain_status === "confirmed").length} verified on-chain`
+                            : "Run your first analysis"
+                    }
+                    changeType={hasData ? "positive" : "neutral"}
+                    isLoading={isLoading}
+                    icon={<TrendingUp className="w-5 h-5" />}
                 />
                 <MetricCard
                     label="Portfolio Health Score"
-                    value="87 / 100"
-                    change="Strong — well diversified"
-                    changeType="neutral"
-                    icon={
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                        </svg>
+                    value={
+                        healthScore !== null
+                            ? `${healthScore} / 100`
+                            : "—"
                     }
+                    change={
+                        riskLevel
+                            ? `Risk: ${riskLevel}`
+                            : "Analyze a portfolio to see"
+                    }
+                    changeType={
+                        riskLevel === "Low"
+                            ? "positive"
+                            : riskLevel === "High"
+                              ? "negative"
+                              : "neutral"
+                    }
+                    isLoading={isLoading}
+                    icon={<ShieldCheck className="w-5 h-5" />}
                 />
             </div>
 
             {/* Middle Row: Chart + AI Insight */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <AllocationChart />
-                <AIInsightCard />
+                <AllocationChart
+                    assets={latestPortfolio?.assets || []}
+                    isLoading={isLoading}
+                />
+                <AIInsightCard
+                    decision={latestAnalysis || null}
+                    isLoading={isLoading}
+                />
             </div>
 
             {/* Bottom Row: Portfolio List */}
-            <PortfolioList />
+            <PortfolioList
+                portfolios={portfolios}
+                isLoading={isLoading}
+            />
         </div>
     );
 }

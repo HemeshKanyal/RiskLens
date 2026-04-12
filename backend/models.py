@@ -46,6 +46,8 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     is_active: bool = True
+    kyc_verified: bool = False
+    kyc_tx: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
@@ -79,4 +81,3 @@ class SimulationRequest(PortfolioRequest):
 class BacktestRequest(BaseModel):
     assets: List[Asset]
     event_id: str               # e.g. "COVID_2020", "CRYPTO_WINTER_2022"
-
