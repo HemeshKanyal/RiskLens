@@ -34,3 +34,7 @@ def get_portfolios_collection():
 
 def get_decisions_collection():
     return get_db()["decision_logs"]
+
+def get_interactions_collection():
+    return get_db()["user_interactions"]
+

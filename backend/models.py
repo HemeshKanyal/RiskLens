@@ -54,3 +54,29 @@ class Token(BaseModel):
 class UserInDB(UserResponse):
     hashed_password: str | None = None
     google_id: str | None = None
+
+
+# --- Phase 3 & Simulation Models ---
+
+VALID_FEEDBACK_ACTIONS = {"accept", "reject", "modify", "ignore"}
+
+class RecommendationFeedback(BaseModel):
+    snapshot_hash: str         # The hash of the portfolio that generated the recommendation
+    action: str                # "accept", "reject", "modify", "ignore"
+    modification_details: Optional[str] = None   # What the user changed (for "modify" action)
+    market_volatility: Optional[float] = None     # Portfolio volatility at decision time
+    reasoning: Optional[str] = None
+
+
+class SimulationRequest(PortfolioRequest):
+    """
+    Simulation is identical to a portfolio request but 
+    typically isn't meant for long-term storage in the main history.
+    """
+    label: Optional[str] = "What-if Scenario"
+
+
+class BacktestRequest(BaseModel):
+    assets: List[Asset]
+    event_id: str               # e.g. "COVID_2020", "CRYPTO_WINTER_2022"
+

@@ -1,7 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from models import PortfolioRequest, KYCRequest, UserCreate, UserLogin, GoogleLogin, UserResponse, UserInDB, Token
+from models import (
+    PortfolioRequest, KYCRequest, UserCreate, UserLogin, 
+    GoogleLogin, UserResponse, UserInDB, Token,
+    RecommendationFeedback, SimulationRequest, BacktestRequest,
+    VALID_FEEDBACK_ACTIONS
+)
 import auth
 import database
 from ai_service import run_ai_analysis
@@ -11,13 +16,18 @@ from zk_kyc_service import generate_kyc_proof
 from blockchain_service import submit_attestation
 from blockchain_kyc_service import submit_kyc_verification
 from pricing_service import get_asset_price, get_bulk_prices
+from simulation_service import run_simulation
+from backtest_service import run_historical_backtest
 
+
+
+import asyncio
 import hashlib
 import json
 import os
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from dotenv import load_dotenv
 
@@ -286,16 +296,33 @@ async def analyze_portfolio(request: PortfolioRequest, current_user: UserRespons
 
     portfolio_dict = {"assets": resolved_assets}
 
-    # Step 1 — AI analysis (Phase 2)
+    # Step 1 — AI analysis (Phase 2 + Phase 3)
     try:
-        ai_result = run_ai_analysis(portfolio_dict, request.risk_profile, request.lookback_days)
+        interactions_col = database.get_interactions_collection()
+        user_history = await interactions_col.find({"user_email": current_user.email}).to_list(length=100)
+        
+        # Fetch decision logs for Phase 3 asset-class cross-referencing
+        decisions_col = database.get_decisions_collection()
+        decision_logs = await decisions_col.find(
+            {"user_email": current_user.email, "action": "portfolio_analysis"},
+            {"_id": 0, "snapshot_hash": 1, "ai_analysis.summary.assets": 1}
+        ).to_list(length=100)
+        
+        ai_result = run_ai_analysis(
+            portfolio_dict, 
+            request.risk_profile, 
+            request.lookback_days,
+            user_history=user_history,
+            decision_logs=decision_logs
+        )
     except Exception as e:
         logger.error("AI analysis failed: %s", str(e))
         raise HTTPException(status_code=400, detail=f"AI analysis failed: {str(e)}")
 
-    # Step 2 — LLM explanation
+    # Step 2 — LLM explanation (with Phase 3 behavioral context)
+    behavioral_context = ai_result.pop("_behavioral_llm_context", None)
     try:
-        explanation = generate_llm_explanation(ai_result)
+        explanation = generate_llm_explanation(ai_result, behavioral_context=behavioral_context)
     except Exception as e:
         logger.warning("LLM explanation failed: %s", str(e))
         explanation = "LLM explanation unavailable at the moment."
@@ -495,3 +522,352 @@ def lookup_prices(symbols: str, types: str):
     prices = get_bulk_prices(items)
 
     return {"prices": prices}
+
+
+# ==============================
+# PHASE 3: BEHAVIORAL FEEDBACK
+# ==============================
+
+@app.post("/portfolio/feedback")
+async def log_recommendation_feedback(
+    feedback: RecommendationFeedback, 
+    current_user: UserResponse = Depends(auth.get_current_user)
+):
+    """
+    Log user interaction with AI recommendations (Accept/Reject/Modify/Ignore).
+    This data drives the Phase 3 behavioral learning engine.
+    """
+    # Validate action
+    action = feedback.action.lower()
+    if action not in VALID_FEEDBACK_ACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action '{feedback.action}'. Valid actions: {', '.join(VALID_FEEDBACK_ACTIONS)}"
+        )
+    
+    # If action is "modify", modification_details should be provided
+    if action == "modify" and not feedback.modification_details:
+        logger.warning("Modify action without details from user %s", current_user.email)
+    
+    # If market_volatility not provided, try to look it up from the decision log
+    market_vol = feedback.market_volatility
+    if market_vol is None:
+        try:
+            decisions_col = database.get_decisions_collection()
+            decision = await decisions_col.find_one(
+                {"snapshot_hash": feedback.snapshot_hash, "user_email": current_user.email},
+                {"_id": 0, "ai_analysis.phase2.portfolio_intelligence.portfolio_volatility_pct": 1}
+            )
+            if decision:
+                market_vol = (
+                    decision.get("ai_analysis", {})
+                    .get("phase2", {})
+                    .get("portfolio_intelligence", {})
+                    .get("portfolio_volatility_pct")
+                )
+        except Exception as e:
+            logger.warning("Could not auto-resolve market volatility: %s", str(e))
+    
+    interactions_collection = database.get_interactions_collection()
+    
+    interaction_record = {
+        "user_email": current_user.email,
+        "snapshot_hash": feedback.snapshot_hash,
+        "action": action,
+        "modification_details": feedback.modification_details,
+        "market_volatility": market_vol,
+        "reasoning": feedback.reasoning,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    await interactions_collection.insert_one(interaction_record)
+    logger.info("Feedback logged for user %s: %s on snapshot %s", current_user.email, action, feedback.snapshot_hash)
+    
+    return {"status": "success", "action_recorded": action, "message": "Feedback recorded. RiskLens will adapt to your preferences."}
+
+
+# ==============================
+# ANALYTICS: RISK TREND
+# ==============================
+
+@app.get("/portfolio/risk-trend")
+async def get_risk_trend(current_user: UserResponse = Depends(auth.get_current_user)):
+    """
+    Fetch historical risk scores for the user to plot a timeline.
+    """
+    decisions_collection = database.get_decisions_collection()
+    
+    # Fetch last 50 decisions for this user
+    cursor = decisions_collection.find(
+        {"user_email": current_user.email, "action": "portfolio_analysis"},
+        {"_id": 0, "created_at": 1, "ai_analysis.risk.risk_score": 1}
+    ).sort("created_at", 1).limit(50)
+    
+    history = await cursor.to_list(length=50)
+    
+    # Format for charting
+    trend = [
+        {
+            "timestamp": h["created_at"], 
+            "risk_score": h["ai_analysis"]["risk"]["risk_score"]
+        } 
+        for h in history if "ai_analysis" in h and "risk" in h["ai_analysis"]
+    ]
+    
+    return {
+        "user_email": current_user.email,
+        "trend": trend,
+        "count": len(trend)
+    }
+
+
+# ==============================
+# SIMULATION: WHAT-IF ENGINE
+# ==============================
+
+@app.post("/simulate")
+async def simulate_portfolio(
+    request: SimulationRequest, 
+    current_user: UserResponse = Depends(auth.get_current_user)
+):
+    """
+    Run a 'What-if' analysis. Identical to real analysis but 
+    skips ZK-proofs and blockchain for speed and privacy.
+    """
+    # Validation
+    validate_portfolio_request(request)
+    
+    # Process portfolio data
+    portfolio_dict = request.dict()
+    
+    try:
+        # Fetch history for Phase 3 personalization in simulation
+        interactions_col = database.get_interactions_collection()
+        user_history = await interactions_col.find({"user_email": current_user.email}).to_list(length=100)
+        
+        # Fetch decision logs for Phase 3 asset-class cross-referencing
+        decisions_col = database.get_decisions_collection()
+        decision_logs = await decisions_col.find(
+            {"user_email": current_user.email, "action": "portfolio_analysis"},
+            {"_id": 0, "snapshot_hash": 1, "ai_analysis.summary.assets": 1}
+        ).to_list(length=100)
+        
+        sim_result = run_simulation(
+            portfolio_dict, 
+            request.risk_profile, 
+            request.lookback_days,
+            user_history=user_history
+        )
+        
+        # LLM explanation for simulation (with behavioral context)
+        behavioral_context = sim_result.pop("_behavioral_llm_context", None)
+        explanation = generate_llm_explanation(sim_result, behavioral_context=behavioral_context)
+        
+        return {
+            "is_simulation": True,
+            "label": request.label,
+            "ai_analysis": sim_result,
+            "llm_explanation": explanation,
+            "simulated_at": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("Simulation failed: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")
+
+
+# ==============================
+# STRESS TESTING: BACKTEST
+# ==============================
+
+@app.post("/backtest")
+async def historical_backtest(
+    request: BacktestRequest, 
+    current_user: UserResponse = Depends(auth.get_current_user)
+):
+    """
+    Run a historical stress test (backtest) on the portfolio.
+    Shows how the current weights would have performed in past crises.
+    """
+    portfolio_dict = request.dict()
+    
+    try:
+        # Run historical backtest
+        backtest_result = run_historical_backtest(portfolio_dict, request.event_id)
+        
+        # LLM explanation for the historical event
+        explanation = generate_llm_explanation(backtest_result)
+        
+        return {
+            "is_backtest": True,
+            "event_id": request.event_id,
+            "analysis": backtest_result,
+            "llm_explanation": explanation,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+        
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error("Backtest failed: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+
+
+# ==============================
+# PHASE 3: DECISION AUDIT LOG
+# ==============================
+
+@app.get("/portfolio/audit")
+async def get_decision_audit(current_user: UserResponse = Depends(auth.get_current_user)):
+    """
+    Returns a structured audit showing:
+    - What the AI recommended vs what the user actually did
+    - Per-asset-class accept/reject rates
+    - Overall behavioral summary and profile drift
+    """
+    # Fetch decision logs (AI recommendations)
+    decisions_col = database.get_decisions_collection()
+    decisions = await decisions_col.find(
+        {"user_email": current_user.email, "action": "portfolio_analysis"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(length=50)
+    
+    # Fetch user interactions (feedback)
+    interactions_col = database.get_interactions_collection()
+    interactions = await interactions_col.find(
+        {"user_email": current_user.email},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(length=200)
+    
+    # Build feedback lookup: snapshot_hash → interaction
+    feedback_lookup = {}
+    for inter in interactions:
+        snap = inter.get("snapshot_hash")
+        if snap:
+            feedback_lookup[snap] = inter
+    
+    # Join: for each decision, attach the user's response
+    audit_trail = []
+    for decision in decisions:
+        snap = decision.get("snapshot_hash", "")
+        user_feedback = feedback_lookup.get(snap)
+        
+        entry = {
+            "timestamp": decision.get("created_at"),
+            "snapshot_hash": snap,
+            "ai_risk_score": decision.get("ai_analysis", {}).get("risk", {}).get("risk_score"),
+            "ai_risk_level": decision.get("ai_analysis", {}).get("risk", {}).get("risk_level"),
+            "had_rebalancing": bool(decision.get("ai_analysis", {}).get("rebalancing", {}).get("actions")),
+            "user_action": user_feedback.get("action") if user_feedback else "no_response",
+            "user_reasoning": user_feedback.get("reasoning") if user_feedback else None,
+            "market_volatility": user_feedback.get("market_volatility") if user_feedback else None,
+            "response_time": None  # Could compute from timestamps
+        }
+        audit_trail.append(entry)
+    
+    # Summary stats
+    total_decisions = len(audit_trail)
+    action_counts = {"accept": 0, "reject": 0, "modify": 0, "ignore": 0, "no_response": 0}
+    for entry in audit_trail:
+        action_counts[entry["user_action"]] = action_counts.get(entry["user_action"], 0) + 1
+    
+    responded = total_decisions - action_counts.get("no_response", 0)
+    response_rate = round(responded / total_decisions, 2) if total_decisions > 0 else 0
+    accept_rate = round(action_counts["accept"] / responded, 2) if responded > 0 else 0
+    
+    # Volatility-based pattern detection
+    high_vol_rejects = 0
+    high_vol_total = 0
+    for entry in audit_trail:
+        if entry.get("market_volatility") and entry["market_volatility"] > 30:
+            high_vol_total += 1
+            if entry["user_action"] == "reject":
+                high_vol_rejects += 1
+    
+    patterns = []
+    if high_vol_total > 3 and (high_vol_rejects / high_vol_total) > 0.6:
+        patterns.append(
+            f"You tend to reject recommendations during high volatility periods "
+            f"({high_vol_rejects}/{high_vol_total} rejected when volatility > 30%)."
+        )
+    
+    return {
+        "user_email": current_user.email,
+        "total_decisions": total_decisions,
+        "summary": {
+            "action_counts": action_counts,
+            "response_rate": response_rate,
+            "accept_rate": accept_rate,
+            "patterns_detected": patterns
+        },
+        "audit_trail": audit_trail
+    }
+
+
+# ==============================
+# PHASE 3: AUTO-IGNORE JOB
+# ==============================
+
+async def _mark_stale_as_ignored():
+    """
+    Find portfolio analyses older than 7 days with no user feedback
+    and auto-insert an 'ignore' record.
+    """
+    try:
+        cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        
+        decisions_col = database.get_decisions_collection()
+        interactions_col = database.get_interactions_collection()
+        
+        # Find old decisions
+        old_decisions = await decisions_col.find(
+            {"action": "portfolio_analysis", "created_at": {"$lt": cutoff}},
+            {"_id": 0, "user_email": 1, "snapshot_hash": 1, "created_at": 1}
+        ).to_list(length=500)
+        
+        auto_ignored = 0
+        for decision in old_decisions:
+            snap = decision.get("snapshot_hash")
+            user_email = decision.get("user_email")
+            
+            # Check if feedback already exists
+            existing = await interactions_col.find_one(
+                {"snapshot_hash": snap, "user_email": user_email}
+            )
+            
+            if not existing:
+                await interactions_col.insert_one({
+                    "user_email": user_email,
+                    "snapshot_hash": snap,
+                    "action": "ignore",
+                    "modification_details": None,
+                    "market_volatility": None,
+                    "reasoning": "Auto-marked as ignored after 7-day window.",
+                    "auto_generated": True,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+                auto_ignored += 1
+        
+        if auto_ignored > 0:
+            logger.info("Auto-ignore job: marked %d stale recommendations as ignored", auto_ignored)
+    
+    except Exception as e:
+        logger.error("Auto-ignore job failed: %s", str(e))
+
+
+async def _auto_ignore_loop():
+    """Background loop that runs the auto-ignore check daily."""
+    # Wait 60 seconds after startup before first run
+    await asyncio.sleep(60)
+    while True:
+        logger.info("Running auto-ignore background job...")
+        await _mark_stale_as_ignored()
+        await asyncio.sleep(86400)  # Run every 24 hours
+
+
+@app.on_event("startup")
+async def start_auto_ignore_job():
+    asyncio.create_task(_auto_ignore_loop())
+    logger.info("Auto-ignore background job scheduled")
+
+
