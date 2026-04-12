@@ -1,7 +1,13 @@
 import requests
 import logging
+import time
 
 logger = logging.getLogger("risklens.pricing")
+
+# Simple in-memory cache to stay within API rate limits
+_price_cache = {}
+CACHE_TTL = 300  # 5 minutes
+
 
 # ========================================
 # CoinGecko — Crypto Prices (Free, no key)
@@ -107,38 +113,45 @@ def get_stock_price(symbol: str) -> float | None:
 
 def get_asset_price(symbol: str, asset_type: str) -> float | None:
     """
-    Fetch live USD price for any supported asset.
-    
-    asset_type: "crypto", "stock", "etf", "commodity", "bond"
+    Fetch live USD price for any supported asset with caching.
     """
     symbol_upper = symbol.upper()
     asset_type_lower = asset_type.lower()
+    
+    # 1. Check Cache
+    cache_key = f"{symbol_upper}:{asset_type_lower}"
+    now = time.time()
+    if cache_key in _price_cache:
+        val, expiry = _price_cache[cache_key]
+        if now < expiry:
+            logger.info("Cache hit for %s: $%.2f", symbol_upper, val)
+            return val
 
+    # 2. Fetch Live
+    price = None
     if asset_type_lower == "crypto":
-        return get_crypto_price(symbol_upper)
+        price = get_crypto_price(symbol_upper)
 
     elif asset_type_lower in ("stock", "etf"):
-        return get_stock_price(symbol_upper)
+        price = get_stock_price(symbol_upper)
 
     elif asset_type_lower == "commodity":
-        # Try Yahoo commodity futures ticker first
         yahoo_ticker = COMMODITY_YAHOO_MAP.get(symbol_upper, None)
         if yahoo_ticker:
-            return get_stock_price(yahoo_ticker)
-        # Fallback: try CoinGecko commodity tokens
-        return get_crypto_price(symbol_upper)
+            price = get_stock_price(yahoo_ticker)
+        else:
+            price = get_crypto_price(symbol_upper)
 
     elif asset_type_lower == "bond":
-        # Use bond ETF proxy from Yahoo
         yahoo_ticker = BOND_YAHOO_MAP.get(symbol_upper, "BND")
-        return get_stock_price(yahoo_ticker)
+        price = get_stock_price(yahoo_ticker)
+    
+    # 3. Update Cache
+    if price is not None:
+        _price_cache[cache_key] = (price, now + CACHE_TTL)
+        
+    return price
 
-    else:
-        # Unknown type — try Yahoo first, then CoinGecko
-        price = get_stock_price(symbol_upper)
-        if price is None:
-            price = get_crypto_price(symbol_upper)
-        return price
 
 
 def get_bulk_prices(symbols_with_types: list[dict]) -> dict:

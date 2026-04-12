@@ -56,19 +56,16 @@ class MarketDataCollector:
     # Public API
     # ------------------------------------------------------------------
 
-    def fetch(self, symbols: List[str]) -> Dict[str, pd.DataFrame]:
+    def fetch(self, symbols: List[str], start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict[str, pd.DataFrame]:
         """
         Fetch historical closing prices for a list of symbols.
-
-        Returns:
-            { symbol: DataFrame(columns=['date', 'close']) }
-            Symbols that fail to fetch are skipped with a warning.
+        Optional start_date and end_date allow for historical stress-testing.
         """
         results: Dict[str, pd.DataFrame] = {}
 
         for symbol in symbols:
             try:
-                df = self._fetch_single(symbol)
+                df = self._fetch_single(symbol, start_date, end_date)
                 if df is not None and not df.empty:
                     results[symbol] = df
                 else:
@@ -78,16 +75,13 @@ class MarketDataCollector:
 
         return results
 
-    def fetch_from_portfolio(self, portfolio_data: Dict) -> Dict[str, pd.DataFrame]:
+    def fetch_from_portfolio(self, portfolio_data: Dict, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict[str, pd.DataFrame]:
         """
         Convenience: extract symbols from a portfolio dict and fetch data.
-
-        Expected format:
-            { "assets": [ { "symbol": "AAPL", "type": "stock", "value": 20000 }, ... ] }
         """
         assets = portfolio_data.get("assets", [])
         symbols = [asset["symbol"] for asset in assets]
-        return self.fetch(symbols)
+        return self.fetch(symbols, start_date, end_date)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -97,16 +91,21 @@ class MarketDataCollector:
         """Map user-facing symbol to Yahoo Finance ticker."""
         return self.SYMBOL_MAP.get(symbol, symbol)
 
-    def _cache_key(self, symbol: str) -> str:
-        """Generate a cache filename based on symbol + lookback."""
-        raw = f"{symbol}_{self.lookback_days}_{datetime.now().strftime('%Y-%m-%d')}"
+    def _cache_key(self, symbol: str, start_date: Optional[datetime], end_date: Optional[datetime]) -> str:
+        """Generate a cache filename based on symbol + range."""
+        if start_date and end_date:
+            date_range = f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
+        else:
+            date_range = f"lookback_{self.lookback_days}_{datetime.now().strftime('%Y%m%d')}"
+            
+        raw = f"{symbol}_{date_range}"
         hashed = hashlib.md5(raw.encode()).hexdigest()[:12]
         return os.path.join(self.cache_dir, f"{symbol}_{hashed}.csv")
 
-    def _fetch_single(self, symbol: str) -> Optional[pd.DataFrame]:
+    def _fetch_single(self, symbol: str, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Optional[pd.DataFrame]:
         """Fetch data for one symbol, using cache if available."""
 
-        cache_path = self._cache_key(symbol)
+        cache_path = self._cache_key(symbol, start_date, end_date)
 
         # Check cache
         if os.path.exists(cache_path):
@@ -115,8 +114,11 @@ class MarketDataCollector:
 
         # Fetch from Yahoo Finance
         ticker = self._resolve_ticker(symbol)
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=self.lookback_days)
+        
+        if not end_date:
+            end_date = datetime.now()
+        if not start_date:
+            start_date = end_date - timedelta(days=self.lookback_days)
 
         yf_ticker = yf.Ticker(ticker)
         hist = yf_ticker.history(start=start_date.strftime("%Y-%m-%d"),
@@ -135,6 +137,7 @@ class MarketDataCollector:
         df.to_csv(cache_path, index=False)
 
         return df
+
 
 
 # ------------------------------------------------------------------
