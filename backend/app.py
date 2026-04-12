@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List
 from fastapi.security import OAuth2PasswordRequestForm
 from models import (
     PortfolioRequest, KYCRequest, UserCreate, UserLogin, 
@@ -18,6 +19,7 @@ from blockchain_kyc_service import submit_kyc_verification
 from pricing_service import get_asset_price, get_bulk_prices
 from simulation_service import run_simulation
 from backtest_service import run_historical_backtest
+from ocr_service import parse_screenshots
 
 
 
@@ -267,7 +269,7 @@ def home():
 # ==============================
 
 @app.post("/analyze")
-async def analyze_portfolio(request: PortfolioRequest, current_user: UserResponse = Depends(auth.get_current_user)):
+async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False, current_user: UserResponse = Depends(auth.get_current_user)):
 
     # Input validation
     validate_portfolio_request(request)
@@ -345,11 +347,12 @@ async def analyze_portfolio(request: PortfolioRequest, current_user: UserRespons
     # Step 6 — blockchain attestation (graceful — save results even if chain fails)
     tx_hash = None
     blockchain_error = None
-    try:
-        tx_hash = submit_attestation(proof, public_inputs)
-    except Exception as e:
-        blockchain_error = str(e)
-        logger.warning("Blockchain attestation failed (non-fatal): %s", blockchain_error)
+    if not wallet_mode:
+        try:
+            tx_hash = submit_attestation(proof, public_inputs)
+        except Exception as e:
+            blockchain_error = str(e)
+            logger.warning("Blockchain attestation failed (non-fatal): %s", blockchain_error)
 
     # Step 7 — Save portfolio snapshot to MongoDB (always save)
     portfolios_collection = database.get_portfolios_collection()
@@ -406,7 +409,7 @@ async def analyze_portfolio(request: PortfolioRequest, current_user: UserRespons
 # ==============================
 
 @app.post("/verify-kyc")
-async def verify_kyc(request: KYCRequest, current_user: UserResponse = Depends(auth.get_current_user)):
+async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_user: UserResponse = Depends(auth.get_current_user)):
 
     # Input validation
     validate_kyc_request(request)
@@ -427,11 +430,12 @@ async def verify_kyc(request: KYCRequest, current_user: UserResponse = Depends(a
     # Step 2 — Submit proof to RiskLensZKKYC contract on-chain (graceful)
     tx_hash = None
     blockchain_error = None
-    try:
-        tx_hash = submit_kyc_verification(proof, public_inputs)
-    except Exception as e:
-        blockchain_error = str(e)
-        logger.warning("KYC blockchain submission failed (non-fatal): %s", blockchain_error)
+    if not wallet_mode:
+        try:
+            tx_hash = submit_kyc_verification(proof, public_inputs)
+        except Exception as e:
+            blockchain_error = str(e)
+            logger.warning("KYC blockchain submission failed (non-fatal): %s", blockchain_error)
 
     # Step 3 — Save KYC decision log to MongoDB (always save)
     decisions_collection = database.get_decisions_collection()
@@ -467,6 +471,68 @@ async def verify_kyc(request: KYCRequest, current_user: UserResponse = Depends(a
         response["blockchain_warning"] = f"Proof is valid but on-chain submission failed: {blockchain_error}"
 
     return response
+
+
+# ==============================
+# CONFIRM USER TRANSACTION
+# ==============================
+
+from pydantic import BaseModel as _BaseModel
+
+class ConfirmTxRequest(_BaseModel):
+    tx_hash: str
+    action: str  # "portfolio_analysis" or "kyc_verification"
+    snapshot_hash: str | None = None  # for portfolio
+
+@app.post("/confirm-tx")
+async def confirm_user_tx(request: ConfirmTxRequest, current_user: UserResponse = Depends(auth.get_current_user)):
+    """
+    Called by the frontend after the user hashes a transaction from their wallet.
+    Saves the tx_hash directly into the DB records.
+    """
+    tx_hash = request.tx_hash
+    if not tx_hash.startswith("0x"):
+        raise HTTPException(status_code=400, detail="Invalid transaction hash")
+
+    try:
+        decisions_collection = database.get_decisions_collection()
+        users_collection = database.get_users_collection()
+        portfolios_collection = database.get_portfolios_collection()
+
+        timestamp = datetime.utcnow().isoformat()
+
+        if request.action == "kyc_verification":
+            # Update users table
+            await users_collection.update_one(
+                {"email": current_user.email},
+                {"$set": {"kyc_verified": True, "kyc_tx": tx_hash}}
+            )
+            # Find the most recent unconfirmed KYC decision
+            await decisions_collection.update_one(
+                {"user_email": current_user.email, "action": "kyc_verification"},
+                {"$set": {"blockchain_tx": tx_hash, "blockchain_status": "confirmed"}},
+                sort=[("created_at", -1)]
+            )
+        elif request.action == "portfolio_analysis" and request.snapshot_hash:
+            # Update portfolio record
+            await portfolios_collection.update_one(
+                {"user_email": current_user.email, "snapshot_hash": request.snapshot_hash},
+                {"$set": {"blockchain_tx": tx_hash, "blockchain_status": "confirmed"}}
+            )
+            # Update decision record
+            await decisions_collection.update_one(
+                {"user_email": current_user.email, "snapshot_hash": request.snapshot_hash, "action": "portfolio_analysis"},
+                {"$set": {"blockchain_tx": tx_hash, "blockchain_status": "confirmed"}}
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Invalid action or missing snapshot hash")
+
+        logger.info("User %s confirmed %s tx: %s", current_user.email, request.action, tx_hash)
+        return {"status": "success", "tx_hash": tx_hash}
+
+    except Exception as e:
+        logger.error("Failed to confirm user tx: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==============================
@@ -522,6 +588,40 @@ def lookup_prices(symbols: str, types: str):
     prices = get_bulk_prices(items)
 
     return {"prices": prices}
+
+
+# ==============================
+# SCREENSHOT ANALYSIS (Phase 3)
+# ==============================
+
+@app.post("/portfolio/parse-screenshot")
+async def extract_portfolio_from_screenshot(
+    files: List[UploadFile] = File(...),
+    current_user: UserResponse = Depends(auth.get_current_user)
+):
+    """
+    Extract portfolio assets from one or more uploaded screenshots.
+    Uses the AI vision model to recognize symbols, quantities, and values.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded")
+    
+    # Optional: limit number of files to prevent abuse
+    if len(files) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 screenshots allowed at once.")
+
+    try:
+        images_bytes = []
+        for file in files:
+            content = await file.read()
+            images_bytes.append(content)
+        
+        result = parse_screenshots(images_bytes)
+        return result
+        
+    except Exception as e:
+        logger.error("Screenshot analysis failed for user %s: %s", current_user.email, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==============================
@@ -794,12 +894,15 @@ async def get_decision_audit(current_user: UserResponse = Depends(auth.get_curre
     return {
         "user_email": current_user.email,
         "total_decisions": total_decisions,
-        "summary": {
-            "action_counts": action_counts,
-            "response_rate": response_rate,
-            "accept_rate": accept_rate,
-            "patterns_detected": patterns
+        "response_rate": response_rate * 100, # Convert to percentage for display if needed, but let's stick to 0-1 and fix frontend
+        "accept_rate": accept_rate * 100,
+        "action_counts": action_counts,
+        "volatility_patterns": {
+            "high_vol_total": high_vol_total,
+            "high_vol_rejects": high_vol_rejects,
+            "panic_sell_probability": round((high_vol_rejects / high_vol_total * 100), 1) if high_vol_total > 0 else 0
         },
+        "drifts": patterns,
         "audit_trail": audit_trail
     }
 
