@@ -98,7 +98,7 @@ Provide clear, explainable insights that help the investor make wise decisions.
                     "temperature": 0.7,
                 }
             },
-            timeout=180
+            timeout=300
         )
 
         result = response.json()

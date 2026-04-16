@@ -27,7 +27,7 @@ const API_BASE_URL =
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 200_000, // 3+ minutes — LLM + ZK proof + blockchain can be slow
+  timeout: 400_000, // 6+ minutes — LLM + ZK proof + blockchain can be slow
   headers: { "Content-Type": "application/json" },
 });
 

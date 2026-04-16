@@ -14,3 +14,4 @@ python-multipart
 yfinance
 pandas
 numpy
+fpdf2
