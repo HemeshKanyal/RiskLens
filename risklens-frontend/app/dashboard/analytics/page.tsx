@@ -6,8 +6,8 @@ import { getPortfolioHistory, getDecisionLogs, runBacktest } from "@/lib/api";
 import type { PortfolioSnapshot, DecisionLog, BacktestResponse } from "@/lib/types";
 import { formatCurrency, formatDate, getRiskColor } from "@/lib/utils";
 import {
-    LineChart,
-    Line,
+    AreaChart,
+    Area,
     XAxis,
     YAxis,
     Tooltip,
@@ -66,9 +66,9 @@ export default function AnalyticsPage() {
     function CustomTooltipChart({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
         if (active && payload && payload.length) {
             return (
-                <div className="bg-[#1a2235] border border-white/[0.08] rounded-xl px-4 py-2.5 shadow-xl">
-                    <p className="text-xs text-gray-400">{label}</p>
-                    <p className="text-sm font-medium text-white mt-0.5">
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 shadow-[0_0_20px_rgba(0,0,0,0.5)] flex flex-col gap-1">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+                    <p className="text-lg font-bold text-white tracking-tight">
                         {typeof payload[0].value === "number" && payload[0].value > 10
                             ? formatCurrency(payload[0].value)
                             : `${payload[0].value}/5`}
@@ -109,32 +109,43 @@ export default function AnalyticsPage() {
                                     Portfolio Value Over Time
                                 </h2>
                             </div>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={valueData}>
+                            <ResponsiveContainer width="100%" height={300} minWidth={0} minHeight={0}>
+                                <AreaChart data={valueData}>
+                                    <defs>
+                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4}/>
+                                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
                                     <CartesianGrid
                                         strokeDasharray="3 3"
                                         stroke="rgba(255,255,255,0.04)"
+                                        vertical={false}
                                     />
                                     <XAxis
                                         dataKey="date"
                                         tick={{ fill: "#6B7280", fontSize: 11 }}
                                         axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
+                                        tickLine={false}
                                     />
                                     <YAxis
                                         tick={{ fill: "#6B7280", fontSize: 11 }}
                                         axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
+                                        tickLine={false}
                                         tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
                                     />
-                                    <Tooltip content={<CustomTooltipChart />} />
-                                    <Line
+                                    <Tooltip content={<CustomTooltipChart />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                                    <Area
                                         type="monotone"
                                         dataKey="value"
                                         stroke="#3B82F6"
-                                        strokeWidth={2}
-                                        dot={{ fill: "#3B82F6", r: 4 }}
-                                        activeDot={{ r: 6 }}
+                                        strokeWidth={3}
+                                        fillOpacity={1}
+                                        fill="url(#colorValue)"
+                                        dot={{ fill: "#0B0F19", stroke: "#3B82F6", strokeWidth: 2, r: 4 }}
+                                        activeDot={{ r: 6, fill: "#3B82F6", stroke: "#fff", strokeWidth: 2 }}
                                     />
-                                </LineChart>
+                                </AreaChart>
                             </ResponsiveContainer>
                         </Card>
                     )}
@@ -149,32 +160,43 @@ export default function AnalyticsPage() {
                                 </h2>
                             </div>
                             {riskData.length > 1 ? (
-                                <ResponsiveContainer width="100%" height={250}>
-                                    <LineChart data={riskData}>
+                                <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
+                                    <AreaChart data={riskData}>
+                                        <defs>
+                                            <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#A855F7" stopOpacity={0.4}/>
+                                                <stop offset="95%" stopColor="#A855F7" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
                                         <CartesianGrid
                                             strokeDasharray="3 3"
                                             stroke="rgba(255,255,255,0.04)"
+                                            vertical={false}
                                         />
                                         <XAxis
                                             dataKey="date"
                                             tick={{ fill: "#6B7280", fontSize: 11 }}
                                             axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
+                                            tickLine={false}
                                         />
                                         <YAxis
                                             domain={[0, 5]}
                                             tick={{ fill: "#6B7280", fontSize: 11 }}
                                             axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
+                                            tickLine={false}
                                         />
-                                        <Tooltip content={<CustomTooltipChart />} />
-                                        <Line
+                                        <Tooltip content={<CustomTooltipChart />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                                        <Area
                                             type="monotone"
                                             dataKey="score"
                                             stroke="#A855F7"
-                                            strokeWidth={2}
-                                            dot={{ fill: "#A855F7", r: 4 }}
-                                            activeDot={{ r: 6 }}
+                                            strokeWidth={3}
+                                            fillOpacity={1}
+                                            fill="url(#colorRisk)"
+                                            dot={{ fill: "#0B0F19", stroke: "#A855F7", strokeWidth: 2, r: 4 }}
+                                            activeDot={{ r: 6, fill: "#A855F7", stroke: "#fff", strokeWidth: 2 }}
                                         />
-                                    </LineChart>
+                                    </AreaChart>
                                 </ResponsiveContainer>
                             ) : (
                                 <div className="space-y-3">

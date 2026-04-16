@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { CheckCircle, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle, Circle, Loader2, XCircle, Code2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export type AnalysisStep =
     | "idle"
@@ -31,7 +32,7 @@ const STEPS = [
     {
         key: "zk_proof",
         label: "Generating ZK Proof",
-        description: "Creating cryptographic proof of analysis",
+        description: "Computing Noir cryptographic circuit on-device",
     },
     {
         key: "blockchain",
@@ -52,47 +53,68 @@ export default function AnalysisProgress({
     );
 
     return (
-        <div className="bg-[#1A2236]/80 backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 space-y-4">
+        <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/10 p-6 space-y-5 shadow-[0_0_30px_rgba(0,0,0,0.5)] overflow-hidden relative"
+        >
+            {/* Background animated pulse if ZK proofing */}
+            {currentStep === "zk_proof" && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: [0.1, 0.2, 0.1] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 -z-10"
+                />
+            )}
+
             <div className="flex items-center gap-3 mb-2">
                 {currentStep === "done" ? (
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><CheckCircle className="w-6 h-6 text-emerald-400" /></motion.div>
                 ) : currentStep === "error" ? (
-                    <XCircle className="w-5 h-5 text-red-400" />
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><XCircle className="w-6 h-6 text-red-400" /></motion.div>
+                ) : currentStep === "zk_proof" ? (
+                    <Code2 className="w-6 h-6 text-emerald-400 animate-pulse" />
                 ) : (
-                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                    <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
                 )}
-                <h3 className="text-sm font-semibold text-white">
+                <h3 className="text-sm font-semibold text-white tracking-tight">
                     {currentStep === "done"
-                        ? "Analysis Complete"
+                        ? "Analysis & Attestation Complete"
                         : currentStep === "error"
                           ? "Analysis Failed"
-                          : "Analyzing Portfolio..."}
+                          : currentStep === "zk_proof"
+                            ? "Computing Cryptographic ZK Proof..."
+                            : "Analyzing Portfolio..."}
                 </h3>
             </div>
 
             {/* Progress bar */}
-            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                <div
-                    className={`h-full rounded-full transition-all duration-700 ease-out ${
+            <div className="h-2 rounded-full bg-white/[0.04] overflow-hidden relative">
+                <motion.div
+                    className={`absolute left-0 top-0 h-full rounded-full ${
                         currentStep === "done"
-                            ? "bg-emerald-500 w-full"
+                            ? "bg-emerald-500"
                             : currentStep === "error"
                               ? "bg-red-500"
-                              : "bg-gradient-to-r from-blue-500 to-purple-500"
+                              : currentStep === "zk_proof"
+                                ? "bg-gradient-to-r from-emerald-400 to-cyan-500"
+                                : "bg-gradient-to-r from-blue-500 to-purple-500"
                     }`}
-                    style={{
-                        width:
-                            currentStep === "done"
-                                ? "100%"
-                                : currentStep === "error"
-                                  ? `${((currentIndex + 1) / STEPS.length) * 100}%`
-                                  : `${((currentIndex + 0.5) / STEPS.length) * 100}%`,
+                    initial={{ width: "0%" }}
+                    animate={{
+                        width: currentStep === "done"
+                            ? "100%"
+                            : currentStep === "error"
+                              ? `${((currentIndex + 1) / STEPS.length) * 100}%`
+                              : `${((currentIndex + 0.5) / STEPS.length) * 100}%`
                     }}
+                    transition={{ duration: 0.5, ease: "easeInOut" }}
                 />
             </div>
 
             {/* Steps */}
-            <div className="space-y-3">
+            <div className="space-y-4 pt-2">
                 {STEPS.map((step, idx) => {
                     let status: "done" | "active" | "pending" | "error" =
                         "pending";
@@ -106,29 +128,44 @@ export default function AnalysisProgress({
                         status = "active";
                     }
 
+                    const isActive = status === "active";
+
                     return (
-                        <div
+                        <motion.div
                             key={step.key}
-                            className={`flex items-center gap-3 transition-opacity ${
-                                status === "pending" ? "opacity-40" : ""
-                            }`}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: status === "pending" ? 0.4 : 1, x: 0 }}
+                            transition={{ delay: idx * 0.1 }}
+                            className="flex items-start gap-4 relative"
                         >
-                            {status === "done" ? (
-                                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                            ) : status === "active" ? (
-                                <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
-                            ) : status === "error" ? (
-                                <XCircle className="w-4 h-4 text-red-400 shrink-0" />
-                            ) : (
-                                <Circle className="w-4 h-4 text-gray-600 shrink-0" />
+                            {/* Connecting Line */}
+                            {idx !== STEPS.length - 1 && (
+                                <div className={`absolute left-2.5 top-6 w-[2px] h-6 -translate-x-1/2 ${status === "done" ? "bg-emerald-500/50" : "bg-white/[0.06]"}`} />
                             )}
+                            
+                            <div className="mt-0.5 relative z-10 bg-[#111] rounded-full">
+                                {status === "done" ? (
+                                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                                ) : status === "active" ? (
+                                    step.key === "zk_proof" ? (
+                                        <Code2 className="w-5 h-5 text-emerald-400 animate-pulse" />
+                                    ) : (
+                                        <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                                    )
+                                ) : status === "error" ? (
+                                    <XCircle className="w-5 h-5 text-red-400" />
+                                ) : (
+                                    <Circle className="w-5 h-5 text-gray-600" />
+                                )}
+                            </div>
+                            
                             <div>
                                 <p
-                                    className={`text-sm font-medium ${
+                                    className={`text-sm font-semibold tracking-wide ${
                                         status === "done"
                                             ? "text-emerald-400"
                                             : status === "active"
-                                              ? "text-white"
+                                              ? step.key === "zk_proof" ? "text-emerald-300" : "text-white"
                                               : status === "error"
                                                 ? "text-red-400"
                                                 : "text-gray-500"
@@ -136,21 +173,36 @@ export default function AnalysisProgress({
                                 >
                                     {step.label}
                                 </p>
-                                <p className="text-xs text-gray-600">
+                                <p className={`text-xs mt-0.5 ${isActive ? "text-gray-300" : "text-gray-600"}`}>
+                                    {isActive && step.key === "zk_proof" ? (
+                                        <motion.span
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="font-mono text-[10px] text-emerald-400/80 mr-2"
+                                        >
+                                            [0x{Math.random().toString(16).slice(2, 8)}]
+                                        </motion.span>
+                                    ) : null}
                                     {step.description}
                                 </p>
                             </div>
-                        </div>
+                        </motion.div>
                     );
                 })}
             </div>
 
             {/* Error message */}
-            {error && (
-                <div className="mt-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                    <p className="text-xs text-red-400">{error}</p>
-                </div>
-            )}
-        </div>
+            <AnimatePresence>
+                {error && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="mt-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20"
+                    >
+                        <p className="text-xs text-red-400">{error}</p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
     );
 }

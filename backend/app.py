@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, File, UploadFile
+from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from fastapi.security import OAuth2PasswordRequestForm
@@ -29,6 +30,9 @@ import json
 import os
 import logging
 import time
+import csv
+from io import StringIO
+from fpdf import FPDF
 from datetime import datetime, timedelta
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -972,5 +976,78 @@ async def _auto_ignore_loop():
 async def start_auto_ignore_job():
     asyncio.create_task(_auto_ignore_loop())
     logger.info("Auto-ignore background job scheduled")
+
+# ==============================
+# AUTOMATED SUMMARY REPORTING (PDF/CSV EXPORT)
+# ==============================
+
+@app.get("/portfolio/export")
+async def export_portfolio(format: str = "csv", current_user: UserResponse = Depends(auth.get_current_user)):
+    portfolios_col = database.get_portfolios_collection()
+    decisions_col = database.get_decisions_collection()
+    
+    latest_portfolio = await portfolios_col.find_one({"user_email": current_user.email}, sort=[("created_at", -1)])
+    if not latest_portfolio:
+        raise HTTPException(status_code=404, detail="No portfolio found to export.")
+        
+    latest_decision = await decisions_col.find_one({"user_email": current_user.email, "snapshot_hash": latest_portfolio["snapshot_hash"]})
+    risk_score = latest_decision.get("ai_analysis", {}).get("risk", {}).get("risk_score", "N/A") if latest_decision else "N/A"
+    
+    assets = latest_portfolio.get("assets", [])
+    
+    if format.lower() == "csv":
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Symbol", "Type", "Quantity", "Value ($)"])
+        for a in assets:
+            writer.writerow([a.get("symbol"), a.get("type"), a.get("quantity"), a.get("value")])
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=RiskLens_Export_{datetime.utcnow().strftime('%Y%m%d')}.csv"}
+        )
+    elif format.lower() == "pdf":
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("helvetica", "B", 16)
+        pdf.cell(200, 10, txt="RiskLens - Portfolio Summary Report", ln=True, align='C')
+        
+        pdf.set_font("helvetica", "", 12)
+        pdf.cell(200, 10, txt=f"Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", ln=True, align='C')
+        pdf.cell(200, 10, txt=f"User: {current_user.email}", ln=True, align='C')
+        pdf.cell(200, 10, txt=f"Risk Score: {risk_score} / 5", ln=True, align='C')
+        pdf.ln(10)
+        
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(40, 10, "Symbol", border=1)
+        pdf.cell(40, 10, "Type", border=1)
+        pdf.cell(40, 10, "Quantity", border=1)
+        pdf.cell(40, 10, "Value ($)", border=1)
+        pdf.ln(10)
+        
+        pdf.set_font("helvetica", "", 12)
+        total_val = 0
+        for a in assets:
+            pdf.cell(40, 10, str(a.get("symbol", "")), border=1)
+            pdf.cell(40, 10, str(a.get("type", "")), border=1)
+            q = a.get("quantity")
+            pdf.cell(40, 10, str(q) if q is not None else "-", border=1)
+            v = a.get("value")
+            if v:
+                total_val += float(v)
+            pdf.cell(40, 10, f"${v:,.2f}" if v else "-", border=1)
+            pdf.ln(10)
+            
+        pdf.ln(5)
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(120, 10, "Total Portfolio Value:", border=0, align="R")
+        pdf.cell(40, 10, f"${total_val:,.2f}", border=0)
+        
+        pdf_bytes = pdf.output()
+        content_bytes = bytes(pdf_bytes) if isinstance(pdf_bytes, bytearray) else (pdf_bytes.encode('latin1') if isinstance(pdf_bytes, str) else pdf_bytes)
+        return Response(content=content_bytes, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=RiskLens_Export_{datetime.utcnow().strftime('%Y%m%d')}.pdf"})
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported format. Only csv and pdf are supported.")
 
 

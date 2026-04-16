@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import WalletButton from "@/components/dashboard/WalletButton";
+import { motion } from "framer-motion";
 import {
     LayoutDashboard,
     Briefcase,
@@ -64,13 +65,15 @@ export default function Sidebar() {
     };
 
     return (
-        <aside className="fixed top-0 left-0 h-screen w-64 bg-[#0d1117] border-r border-white/[0.06] flex flex-col z-50">
+        <aside className="fixed top-0 left-0 h-screen w-64 bg-white/5 backdrop-blur-2xl border-r border-white/10 flex flex-col z-50">
             {/* Logo */}
             <div className="px-6 py-6 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/25">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-[0_0_15px_rgba(59,130,246,0.3)]">
                     R
                 </div>
-                <span className="text-lg font-semibold tracking-tight">RiskLens</span>
+                <span className="text-xl font-[family-name:var(--font-outfit)] font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                    RiskLens
+                </span>
             </div>
 
             {/* Navigation */}
@@ -87,16 +90,19 @@ export default function Sidebar() {
                         <Link
                             key={item.label}
                             href={item.href}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative ${
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 group relative ${
                                 isActive
-                                    ? "bg-white/[0.06] text-white"
-                                    : "text-gray-500 hover:text-gray-300 hover:bg-white/[0.03]"
+                                    ? "bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+                                    : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
                             }`}
                         >
                             {isActive && (
-                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-gradient-to-b from-blue-400 to-purple-500" />
+                                <motion.div
+                                    layoutId="sidebar-active"
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-gradient-to-b from-blue-400 to-purple-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                                />
                             )}
-                            <Icon className="w-5 h-5" />
+                            <Icon className="w-5 h-5 group-hover:scale-110 transition-transform duration-300" />
                             {item.label}
                         </Link>
                     );
@@ -109,22 +115,22 @@ export default function Sidebar() {
             </div>
 
             {/* User */}
-            <div className="px-4 py-4 border-t border-white/[0.06]">
+            <div className="px-4 py-4 border-t border-white/10 bg-white/[0.02]">
                 <div className="flex items-center gap-3 px-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-xs font-bold text-white">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-xs font-bold text-white shadow-[0_0_10px_rgba(16,185,129,0.2)]">
                         {getInitial()}
                     </div>
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white truncate">
                             {user?.full_name || "User"}
                         </p>
-                        <p className="text-xs text-gray-500 truncate">
+                        <p className="text-xs text-gray-400 truncate">
                             {user?.email || ""}
                         </p>
                     </div>
                     <button
                         onClick={logout}
-                        className="p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 hover:text-red-400 transition-all cursor-pointer"
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all cursor-pointer"
                         title="Sign out"
                     >
                         <LogOut className="w-4 h-4" />

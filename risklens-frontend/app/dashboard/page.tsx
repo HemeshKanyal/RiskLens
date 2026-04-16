@@ -5,11 +5,13 @@ import MetricCard from "@/components/dashboard/MetricCard";
 import AllocationChart from "@/components/dashboard/AllocationChart";
 import AIInsightCard from "@/components/dashboard/AIInsightCard";
 import PortfolioList from "@/components/dashboard/PortfolioList";
-import { getPortfolioHistory, getDecisionLogs } from "@/lib/api";
+import { getPortfolioHistory, getDecisionLogs, exportReport } from "@/lib/api";
 import type { PortfolioSnapshot, DecisionLog } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
-import { DollarSign, TrendingUp, ShieldCheck, Plus } from "lucide-react";
+import { DollarSign, TrendingUp, ShieldCheck, Plus, FileText, FileSpreadsheet } from "lucide-react";
+import toast from "react-hot-toast";
 import Link from "next/link";
+import { motion } from "framer-motion";
 
 export default function DashboardPage() {
     const [portfolios, setPortfolios] = useState<PortfolioSnapshot[]>([]);
@@ -54,11 +56,16 @@ export default function DashboardPage() {
     const hasData = portfolios.length > 0;
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6">
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="max-w-7xl mx-auto space-y-6"
+        >
             {/* Page Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold tracking-tight text-white">
+                    <h1 className="text-3xl font-[family-name:var(--font-outfit)] font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
                         Dashboard
                     </h1>
                     <p className="text-sm text-gray-500 mt-1">
@@ -68,9 +75,45 @@ export default function DashboardPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    {hasData && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        toast.loading("Exporting CSV...", { id: "export-csv" });
+                                        await exportReport("csv");
+                                        toast.success("CSV Downloaded", { id: "export-csv" });
+                                    } catch (err) {
+                                        toast.error("Failed to export CSV", { id: "export-csv" });
+                                    }
+                                }}
+                                className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm font-medium text-gray-300 hover:bg-white/[0.1] transition-all flex items-center gap-1.5"
+                                title="Export CSV"
+                            >
+                                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                                <span className="hidden sm:inline">CSV</span>
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        toast.loading("Exporting PDF...", { id: "export-pdf" });
+                                        await exportReport("pdf");
+                                        toast.success("PDF Downloaded", { id: "export-pdf" });
+                                    } catch (err) {
+                                        toast.error("Failed to export PDF", { id: "export-pdf" });
+                                    }
+                                }}
+                                className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm font-medium text-gray-300 hover:bg-white/[0.1] transition-all flex items-center gap-1.5"
+                                title="Export PDF"
+                            >
+                                <FileText className="w-4 h-4 text-purple-400" />
+                                <span className="hidden sm:inline">PDF</span>
+                            </button>
+                        </div>
+                    )}
                     <Link
                         href="/dashboard/portfolio"
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-sm font-medium text-white hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-sm font-medium text-white hover:from-blue-600 hover:to-purple-700 transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] flex items-center gap-2 tracking-wide"
                     >
                         <Plus className="w-4 h-4" />
                         New Analysis
@@ -153,6 +196,6 @@ export default function DashboardPage() {
                 portfolios={portfolios}
                 isLoading={isLoading}
             />
-        </div>
+        </motion.div>
     );
 }

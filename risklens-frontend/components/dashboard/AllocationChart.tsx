@@ -82,7 +82,7 @@ export default function AllocationChart({
             ) : hasData ? (
                 <>
                     <div className="flex-1 flex items-center justify-center min-h-[220px]">
-                        <ResponsiveContainer width="100%" height={220}>
+                        <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
                             <PieChart>
                                 <Pie
                                     data={data}
