@@ -1,5 +1,5 @@
 import "./globals.css";
-import { Inter } from "next/font/google";
+import { Inter, Outfit } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { WalletProvider } from "@/lib/wallet-context";
@@ -7,6 +7,11 @@ import { WalletProvider } from "@/lib/wallet-context";
 const inter = Inter({
     subsets: ["latin"],
     variable: "--font-inter",
+});
+
+const outfit = Outfit({
+    subsets: ["latin"],
+    variable: "--font-outfit",
 });
 
 export const metadata = {
@@ -20,7 +25,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }) {
     return (
-        <html lang="en" className={inter.variable}>
+        <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
             <body className="bg-[#0B0F19] text-white font-sans">
                 <AuthProvider>
                     <WalletProvider>
@@ -30,7 +35,8 @@ export default function RootLayout({
                         toastOptions={{
                             duration: 4000,
                             style: {
-                                background: "#1A2236",
+                                background: "rgba(26, 34, 54, 0.8)",
+                                backdropFilter: "blur(12px)",
                                 color: "#fff",
                                 border: "1px solid rgba(255,255,255,0.08)",
                                 borderRadius: "12px",

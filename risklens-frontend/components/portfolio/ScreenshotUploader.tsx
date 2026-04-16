@@ -2,8 +2,9 @@
 
 import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, Image as ImageIcon, Loader2, CheckCircle, AlertCircle, X } from "lucide-react";
+import { Upload, Image as ImageIcon, Loader2, CheckCircle, AlertCircle, X, Sparkles } from "lucide-react";
 import { parseScreenshot } from "@/lib/api";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Asset, ScreenshotResult } from "@/lib/types";
 import toast from "react-hot-toast";
 
@@ -130,28 +131,41 @@ export default function ScreenshotUploader({ onExtracted }: ScreenshotUploaderPr
             </div>
 
             {/* Previews Grid */}
-            {previews.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {previews.map((preview, index) => (
-                        <div key={index} className="relative group rounded-xl overflow-hidden border border-white/[0.08] aspect-video">
-                            <img
-                                src={preview}
-                                alt={`Screenshot ${index + 1}`}
-                                className="w-full h-full object-cover"
-                            />
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    removeFile(index);
-                                }}
-                                className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+            <AnimatePresence>
+                {previews.length > 0 && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="grid grid-cols-2 sm:grid-cols-4 gap-4"
+                    >
+                        {previews.map((preview, index) => (
+                            <motion.div 
+                                key={index} 
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: index * 0.1 }}
+                                className="relative group rounded-xl overflow-hidden border border-white/[0.08] aspect-video"
                             >
-                                <X className="w-3 h-3" />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
+                                <img
+                                    src={preview}
+                                    alt={`Screenshot ${index + 1}`}
+                                    className="w-full h-full object-cover"
+                                />
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeFile(index);
+                                    }}
+                                    className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </motion.div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Extraction Button */}
             {files.length > 0 && !result && (
@@ -177,8 +191,13 @@ export default function ScreenshotUploader({ onExtracted }: ScreenshotUploaderPr
             )}
 
             {/* Results */}
-            {result && (
-                <div className="space-y-4">
+            <AnimatePresence>
+                {result && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-4"
+                    >
                     {/* Status */}
                     <div
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
@@ -283,8 +302,9 @@ export default function ScreenshotUploader({ onExtracted }: ScreenshotUploaderPr
                             </div>
                         </>
                     )}
-                </div>
+                </motion.div>
             )}
+            </AnimatePresence>
         </div>
     );
 }

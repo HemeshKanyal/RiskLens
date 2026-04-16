@@ -270,4 +270,17 @@ export async function getDecisionAudit(): Promise<AuditResponse> {
   return data;
 }
 
+export async function exportReport(format: "csv" | "pdf"): Promise<void> {
+  const { data } = await api.get(`/portfolio/export?format=${format}`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(new Blob([data]));
+  const a = document.createElement("a");
+  a.href = url;
+  a.setAttribute("download", `RiskLens_Report_${new Date().toISOString().split("T")[0]}.${format}`);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export default api;
