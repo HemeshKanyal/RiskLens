@@ -23,10 +23,19 @@ export function formatPercent(value: number, decimals = 1): string {
 }
 
 /**
+ * Parse a backend timestamp. Older records were stored as naive UTC
+ * ("2026-10-01T06:30:00"), which browsers would read as local time.
+ */
+export function parseServerDate(dateStr: string): Date {
+  const hasZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(dateStr);
+  return new Date(hasZone ? dateStr : `${dateStr}Z`);
+}
+
+/**
  * Format a date string into a readable format.
  */
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = parseServerDate(dateStr);
   return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -38,7 +47,7 @@ export function formatDate(dateStr: string): string {
  * Format a date string into a relative time (e.g., "2 hours ago").
  */
 export function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = parseServerDate(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);

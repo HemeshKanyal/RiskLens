@@ -85,5 +85,6 @@ def submit_proof(address_env: str, fn_name: str, proof: str, public_inputs: str)
     })
     signed = w3.eth.account.sign_transaction(tx, private_key)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    logger.info("%s tx submitted: %s", fn_name, tx_hash.hex())
-    return tx_hash.hex()
+    tx_hex = Web3.to_hex(tx_hash)  # always 0x-prefixed
+    logger.info("%s tx submitted: %s", fn_name, tx_hex)
+    return tx_hex

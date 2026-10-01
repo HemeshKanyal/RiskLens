@@ -24,3 +24,8 @@ env/
 ai_phase2/.cache/
 zk/*/proof/
 zk/*/Prover.toml
+
+# Local chain
+blockchain/.local-build/
+blockchain/.anvil-state.json
+blockchain/.anvil.log

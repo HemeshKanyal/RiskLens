@@ -35,11 +35,16 @@ import time
 import csv
 from io import StringIO
 from fpdf import FPDF
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def utc_now_iso() -> str:
+    """UTC timestamp with an explicit offset, so clients don't read it as local time."""
+    return datetime.now(timezone.utc).isoformat()
 
 # ==============================
 # LOGGING SETUP
@@ -382,7 +387,7 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
         "snapshot_hash": snapshot_hash,
         "blockchain_tx": tx_hash,
         "blockchain_status": "confirmed" if tx_hash else "failed",
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": utc_now_iso()
     }
     await portfolios_collection.insert_one(portfolio_record)
 
@@ -397,7 +402,7 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
         "llm_explanation": explanation,
         "blockchain_tx": tx_hash,
         "blockchain_status": "confirmed" if tx_hash else "failed",
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": utc_now_iso()
     }
     await decisions_collection.insert_one(decision_record)
 
@@ -467,7 +472,7 @@ async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_use
         "identity_commitment_hash": identity_hash,
         "blockchain_tx": tx_hash,
         "blockchain_status": "confirmed" if tx_hash else "failed",
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": utc_now_iso()
     }
     await decisions_collection.insert_one(kyc_record)
 
@@ -521,7 +526,7 @@ async def confirm_user_tx(request: ConfirmTxRequest, current_user: UserResponse 
         users_collection = database.get_users_collection()
         portfolios_collection = database.get_portfolios_collection()
 
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = utc_now_iso()
 
         if request.action == "kyc_verification":
             # Update users table
@@ -699,7 +704,7 @@ async def log_recommendation_feedback(
         "modification_details": feedback.modification_details,
         "market_volatility": market_vol,
         "reasoning": feedback.reasoning,
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": utc_now_iso()
     }
     
     await interactions_collection.insert_one(interaction_record)
@@ -791,7 +796,7 @@ async def simulate_portfolio(
             "label": request.label,
             "ai_analysis": sim_result,
             "llm_explanation": explanation,
-            "simulated_at": datetime.utcnow().isoformat()
+            "simulated_at": utc_now_iso()
         }
         
     except Exception as e:
@@ -826,7 +831,7 @@ async def historical_backtest(
             "event_id": request.event_id,
             "analysis": backtest_result,
             "llm_explanation": explanation,
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": utc_now_iso()
         }
         
     except ValueError as ve:
@@ -942,7 +947,7 @@ async def _mark_stale_as_ignored():
     and auto-insert an 'ignore' record.
     """
     try:
-        cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         
         decisions_col = database.get_decisions_collection()
         interactions_col = database.get_interactions_collection()
@@ -972,7 +977,7 @@ async def _mark_stale_as_ignored():
                     "market_volatility": None,
                     "reasoning": "Auto-marked as ignored after 7-day window.",
                     "auto_generated": True,
-                    "created_at": datetime.utcnow().isoformat()
+                    "created_at": utc_now_iso()
                 })
                 auto_ignored += 1
         
@@ -1026,7 +1031,7 @@ async def export_portfolio(format: str = "csv", current_user: UserResponse = Dep
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=RiskLens_Export_{datetime.utcnow().strftime('%Y%m%d')}.csv"}
+            headers={"Content-Disposition": f"attachment; filename=RiskLens_Export_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"}
         )
     elif format.lower() == "pdf":
         pdf = FPDF()
@@ -1035,7 +1040,7 @@ async def export_portfolio(format: str = "csv", current_user: UserResponse = Dep
         pdf.cell(200, 10, txt="RiskLens - Portfolio Summary Report", ln=True, align='C')
         
         pdf.set_font("helvetica", "", 12)
-        pdf.cell(200, 10, txt=f"Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", ln=True, align='C')
+        pdf.cell(200, 10, txt=f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC", ln=True, align='C')
         pdf.cell(200, 10, txt=f"User: {current_user.email}", ln=True, align='C')
         pdf.cell(200, 10, txt=f"Risk Score: {risk_score} / 5", ln=True, align='C')
         pdf.ln(10)
@@ -1067,7 +1072,7 @@ async def export_portfolio(format: str = "csv", current_user: UserResponse = Dep
         
         pdf_bytes = pdf.output()
         content_bytes = bytes(pdf_bytes) if isinstance(pdf_bytes, bytearray) else (pdf_bytes.encode('latin1') if isinstance(pdf_bytes, str) else pdf_bytes)
-        return Response(content=content_bytes, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=RiskLens_Export_{datetime.utcnow().strftime('%Y%m%d')}.pdf"})
+        return Response(content=content_bytes, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=RiskLens_Export_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
     else:
         raise HTTPException(status_code=400, detail="Unsupported format. Only csv and pdf are supported.")
 

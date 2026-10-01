@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 import logging
 import json
@@ -10,44 +11,105 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
 
 def _trim_analysis(ai_result):
-    """Extract only the key fields the LLM needs — avoids sending massive dicts."""
-    try:
-        summary = ai_result.get("summary", {})
-        risk = ai_result.get("risk", {})
-        rebalancing = ai_result.get("rebalancing", {})
-        phase2 = ai_result.get("phase2", {})
+    """
+    The figures the explanation may use, as explicit labelled fields.
 
-        trimmed = {
-            "risk_score": risk.get("risk_score"),
-            "risk_level": risk.get("risk_level"),
-            "phase1_score": risk.get("phase1_score"),
-            "phase2_score": risk.get("phase2_score"),
-            "explanation": risk.get("explanation"),
-            "summary": summary,
-            "rebalancing": rebalancing,
+    Small local models mix up numbers when they have to dig them out of
+    prose, so per-holding values and correlated pairs are given directly.
+    """
+    try:
+        summary = ai_result.get("summary") or {}
+        risk = ai_result.get("risk") or {}
+        rebalancing = ai_result.get("rebalancing") or {}
+        phase2 = ai_result.get("phase2") or {}
+        intel = phase2.get("portfolio_intelligence") or {}
+        per_asset = phase2.get("per_asset_metrics") or {}
+        contributions = intel.get("risk_contributions") or {}
+
+        holdings = {
+            symbol: {
+                "share_of_value_pct": weight,
+                "share_of_risk_pct": contributions.get(symbol),
+                "annual_volatility_pct": (per_asset.get(symbol) or {}).get("volatility_pct"),
+                "max_drawdown_pct": (per_asset.get(symbol) or {}).get("max_drawdown_pct"),
+            }
+            for symbol, weight in (summary.get("asset_allocations_percent") or {}).items()
         }
 
-        # Add Phase 2 insights if available
-        if phase2:
-            insights = phase2.get("insights", {})
-            trimmed["portfolio_summary"] = insights.get("summary", "")
-            trimmed["portfolio_volatility"] = phase2.get("portfolio_intelligence", {}).get("portfolio_volatility_pct")
-            trimmed["diversification_ratio"] = phase2.get("portfolio_intelligence", {}).get("diversification_ratio")
-            # Only include message text from insights, not full objects
-            portfolio_insights = insights.get("portfolio_insights", [])
-            trimmed["key_insights"] = [
-                i.get("message", str(i)) if isinstance(i, dict) else str(i)
-                for i in portfolio_insights[:5]
-            ]
+        trimmed = {
+            "risk_score_out_of_5": risk.get("risk_score"),
+            "risk_level": risk.get("risk_level"),
+            "risk_profile": rebalancing.get("profile_used"),
+            # Plain names so the model doesn't echo internal "Phase" jargon
+            "asset_class_mix_score": risk.get("phase1_score"),
+            "market_behaviour_score": risk.get("phase2_score"),
+            "total_value_usd": summary.get("total_value"),
+            "allocation_by_asset_class_pct": summary.get("class_allocations_percent"),
+            "holdings": holdings,
+            "suggested_changes": [
+                re.sub(r"\s*\(Profile: \w+\)\.?$", ".", s) for s in rebalancing.get("suggestions") or []
+            ],
+        }
 
+        if phase2:
+            trimmed["portfolio_annual_volatility_pct"] = intel.get("portfolio_volatility_pct")
+            trimmed["diversification_ratio"] = intel.get("diversification_ratio")
+            pairs = intel.get("high_correlation_pairs") or []
+            trimmed["highly_correlated_pairs"] = (
+                [f"{a} and {b} (correlation {r})" for a, b, r in pairs] or "none"
+            )
+        else:
+            trimmed["note"] = "Market data was unavailable; only the asset-class mix was scored."
+
+        trimmed = {"key_facts": _key_facts(trimmed), **trimmed}
         return json.dumps(trimmed, indent=2, default=str)
     except Exception:
         return json.dumps(ai_result, indent=2, default=str)[:3000]
 
 
+def _key_facts(t):
+    """Comparisons and rankings stated outright, so the model only has to rephrase them."""
+    facts = []
+    mix, market = t.get("asset_class_mix_score"), t.get("market_behaviour_score")
+    if mix is not None and market is not None:
+        bigger = "the mix of asset classes" if mix >= market else "recent market behaviour (volatility)"
+        facts.append(
+            f"The asset-class mix scores {mix} and market behaviour scores {market} (out of 5); "
+            f"{bigger} is the bigger driver of the overall score."
+        )
+    ranked = sorted(
+        ((sym, h) for sym, h in t.get("holdings", {}).items() if h.get("share_of_risk_pct") is not None),
+        key=lambda x: x[1]["share_of_risk_pct"],
+        reverse=True,
+    )
+    if ranked:
+        facts.append(
+            "Holdings ordered by share of portfolio risk: "
+            + ", ".join(f"{sym} {h['share_of_risk_pct']}% of risk ({h['share_of_value_pct']}% of value)" for sym, h in ranked)
+            + "."
+        )
+        heavy = [sym for sym, h in ranked if h["share_of_risk_pct"] - h["share_of_value_pct"] >= 5]
+        if heavy:
+            facts.append(f"These add noticeably more risk than their size: {', '.join(heavy)}.")
+    pairs = t.get("highly_correlated_pairs")
+    if pairs == "none":
+        facts.append("No two holdings are highly correlated.")
+    elif pairs:
+        facts.append("Highly correlated pairs: " + "; ".join(pairs) + ".")
+    return facts
+
+
+def _strip_markdown(text: str) -> str:
+    """Small models sometimes ignore 'no markdown'; the UI shows plain text."""
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)
+    text = re.sub(r"^\s*[*-]\s+", "", text, flags=re.M)
+    return text.strip()
+
+
 def generate_llm_explanation(ai_result, behavioral_context=None):
     """
-    Generate a natural-language explanation of portfolio analysis using Llama 3.1 via Ollama.
+    Generate a natural-language explanation of portfolio analysis using a local model via Ollama.
     
     Args:
         ai_result: The AI analysis result dict from the pipeline.
@@ -58,35 +120,31 @@ def generate_llm_explanation(ai_result, behavioral_context=None):
     # Build the behavioral section only if context is available
     behavioral_section = ""
     if behavioral_context:
-        behavioral_section = f"""
-## User Behavioral Profile (Phase 3 — Personalization Data)
+        behavioral_section = f"""How this investor has responded to past suggestions:
 {behavioral_context}
 
 """
 
     analysis_text = _trim_analysis(ai_result)
 
-    prompt = f"""You are a senior financial risk analyst at RiskLens.
+    prompt = f"""You are a financial risk analyst writing for an everyday investor.
 
-{behavioral_section}Explain the following portfolio analysis in simple but professional language.
-Focus specifically on:
-1. The combined risk score and what it means for the selected risk profile.
-2. Market-driven insights from Phase 2 (Volatility and Correlations).
-3. Personalized behavioral insights from Phase 3 (based on 'personalization' data if present).
-4. Which assets are the biggest risk contributors.
-5. Actionable rebalancing recommendations.
+{behavioral_section}Explain the portfolio analysis below in 3 short paragraphs of plain prose:
+1. What the overall risk score (0 to 5) means for their chosen risk profile, and what drives it.
+2. Which holdings contribute the most risk, and any pairs that move together.
+3. The one or two most useful changes they could consider.
 
-If behavioral data is provided above, personalize your tone and recommendations
-to align with the user's actual decision-making style, not just their stated profile.
-For example, if the user tends to reject bond recommendations, don't push bonds heavily —
-suggest alternatives that match their demonstrated preferences.
+Rules:
+- Base the explanation on "key_facts"; they are correct. Use only numbers from the data
+  and never contradict a key fact.
+- No markdown: no headings, bold, bullet points or numbered lists.
+- Don't mention internal terms like "phase", "HHI" or field names.
+- If investor history is given above, adapt suggestions to it (for example, if they keep
+  declining bonds, suggest other ways to reduce risk).
+- Under 200 words. This is educational information, not personal financial advice.
 
-Keep your response concise (under 300 words).
-
-Analysis Data:
+Analysis data:
 {analysis_text}
-
-Provide clear, explainable insights that help the investor make wise decisions.
 """
 
     try:
@@ -99,7 +157,7 @@ Provide clear, explainable insights that help the investor make wise decisions.
                 "stream": False,
                 "options": {
                     "num_predict": 512,  # Limit output tokens for speed
-                    "temperature": 0.7,
+                    "temperature": 0.3,
                 }
             },
             timeout=300
@@ -107,7 +165,7 @@ Provide clear, explainable insights that help the investor make wise decisions.
 
         result = response.json()
         logger.info("LLM explanation generated successfully")
-        return result["response"]
+        return _strip_markdown(result["response"])
 
     except Exception as e:
         logger.warning("LLM generation failed: %s", str(e))
