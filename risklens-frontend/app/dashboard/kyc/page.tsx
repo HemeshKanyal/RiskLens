@@ -38,7 +38,8 @@ export default function KYCPage() {
     const [countryCode, setCountryCode] = useState("");
     const [documentId, setDocumentId] = useState("");
     const [errors, setErrors] = useState<Errors>({});
-    const [isLoading, setIsLoading] = useState(false);
+    const [phase, setPhase] = useState<"idle" | "proving" | "wallet">("idle");
+    const isLoading = phase !== "idle";
     const [result, setResult] = useState<KYCResponse | null>(null);
 
     const validate = (): Errors => {
@@ -61,7 +62,7 @@ export default function KYCPage() {
         setErrors(found);
         if (Object.keys(found).length > 0) return;
 
-        setIsLoading(true);
+        setPhase("proving");
         setResult(null);
         try {
             const data = await verifyKYC(
@@ -76,11 +77,11 @@ export default function KYCPage() {
             );
 
             if (isConnected && data.zk_proof && data.public_inputs) {
+                setPhase("wallet");
                 try {
                     const txHash = await submitKYC(data.zk_proof, data.public_inputs);
                     data.blockchain_tx = txHash;
                     data.blockchain_status = "confirmed";
-                    data.status = "Attestation recorded on-chain from your wallet";
                     delete data.blockchain_warning;
                     await confirmTx({ tx_hash: txHash, action: "kyc_verification" });
                 } catch (walletErr) {
@@ -92,7 +93,7 @@ export default function KYCPage() {
         } catch (err) {
             setErrors({ form: extractError(err) });
         } finally {
-            setIsLoading(false);
+            setPhase("idle");
         }
     };
 
@@ -155,7 +156,7 @@ export default function KYCPage() {
                         </p>
                         <Button type="submit" disabled={isLoading}>
                             {isLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-                            {isLoading ? "Generating proof…" : "Create attestation"}
+                            {phase === "proving" ? "Generating proof…" : phase === "wallet" ? "Confirm in your wallet…" : "Create attestation"}
                         </Button>
                     </div>
                 </form>
@@ -164,7 +165,11 @@ export default function KYCPage() {
             {result && (
                 <Card aria-live="polite">
                     <CardHeader
-                        title={result.status}
+                        title={
+                            result.blockchain_status === "confirmed"
+                                ? `Attestation recorded on ${CHAIN.name}`
+                                : "Proof created, but not recorded on-chain"
+                        }
                         action={
                             <Badge tone={result.blockchain_status === "confirmed" ? "positive" : "warning"} dot>
                                 {result.blockchain_status === "confirmed" ? "Confirmed" : "Not on-chain"}

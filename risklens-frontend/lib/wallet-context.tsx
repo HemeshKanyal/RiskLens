@@ -12,7 +12,7 @@ import React, {
     useCallback,
     useEffect,
 } from "react";
-import { BrowserProvider, JsonRpcSigner, Contract } from "ethers";
+import { BrowserProvider, Contract, parseEther, toQuantity } from "ethers";
 import toast from "react-hot-toast";
 import { CHAIN } from "./chain";
 
@@ -43,6 +43,29 @@ interface WalletContextValue {
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
 const TARGET_CHAIN_ID = CHAIN.id;
+const LOCAL_CHAIN_ID = 31337;
+
+/**
+ * Local Anvil chain only: give the connected wallet test ETH so it can pay
+ * fees. Uses Anvil's dev-only anvil_setBalance; does nothing on real networks.
+ */
+async function fundOnLocalChain(address: string) {
+    if (CHAIN.id !== LOCAL_CHAIN_ID || !CHAIN.rpcUrl) return;
+    const rpc = (method: string, params: unknown[]) =>
+        fetch(CHAIN.rpcUrl, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        }).then((r) => r.json());
+    try {
+        const { result } = await rpc("eth_getBalance", [address, "latest"]);
+        if (BigInt(result ?? "0x0") >= parseEther("1")) return;
+        await rpc("anvil_setBalance", [address, toQuantity(parseEther("100"))]);
+        toast.success("Added 100 test ETH to your wallet (local chain only)");
+    } catch {
+        // Chain not reachable; the fee check will explain if a transaction can't be paid
+    }
+}
 
 function splitPublicInputs(hex: string): string[] {
     let cleaned = hex.startsWith("0x") ? hex.slice(2) : hex;
@@ -103,6 +126,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             window.ethereum!.removeListener("chainChanged", handleChainChanged);
         };
     }, []);
+
+    useEffect(() => {
+        if (address && chainId === LOCAL_CHAIN_ID) fundOnLocalChain(address);
+    }, [address, chainId]);
 
     const connect = useCallback(async () => {
         if (typeof window === "undefined" || !window.ethereum) {
@@ -167,70 +194,64 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         toast.success("Wallet disconnected");
     }, []);
 
-    const getSigner = useCallback(async (): Promise<JsonRpcSigner> => {
-        if (!window.ethereum) throw new Error("MetaMask not installed");
-        const provider = new BrowserProvider(window.ethereum);
-        return provider.getSigner();
-    }, []);
-
-    const submitAttestation = useCallback(
-        async (proof: string, publicInputs: string): Promise<string> => {
+    // Send a proof to one of our contracts, checking first that the wallet
+    // can pay the fee so the user gets a clear message instead of a wallet alert.
+    const sendProofTx = useCallback(
+        async (
+            contractAddress: string,
+            abi: string[],
+            fn: "attest" | "verifyKYC",
+            proof: string,
+            publicInputs: string
+        ): Promise<string> => {
             if (!isConnected) throw new Error("Wallet not connected");
-            if (!isCorrectChain) throw new Error("Switch to Sepolia testnet");
+            if (!isCorrectChain) throw new Error(`Switch your wallet to ${CHAIN.name}`);
 
-            const signer = await getSigner();
-            const contract = new Contract(ATTESTATION_CONTRACT, ATTESTATION_ABI, signer);
+            const provider = new BrowserProvider(window.ethereum!);
+            const signer = await provider.getSigner();
+            const contract = new Contract(contractAddress, abi, signer);
+            const args = [proof.startsWith("0x") ? proof : "0x" + proof, splitPublicInputs(publicInputs)];
 
-            const proofBytes = proof.startsWith("0x") ? proof : "0x" + proof;
-            const inputsArray = splitPublicInputs(publicInputs);
+            const [gas, fees, balance] = await Promise.all([
+                contract[fn].estimateGas(...args),
+                provider.getFeeData(),
+                provider.getBalance(await signer.getAddress()),
+            ]);
+            const pricePerGas = fees.maxFeePerGas ?? fees.gasPrice ?? BigInt(0);
+            if (balance < gas * pricePerGas) {
+                throw new Error(
+                    `Not enough ETH on ${CHAIN.name} to pay the network fee` +
+                        (CHAIN.id === LOCAL_CHAIN_ID ? ". Reconnect your wallet to get local test ETH." : ".")
+                );
+            }
 
-            toast.loading("Confirm transaction in MetaMask...", { id: "tx" });
-
+            toast.loading("Confirm the transaction in your wallet…", { id: "tx" });
             try {
-                const tx = await contract.attest(proofBytes, inputsArray);
-                toast.loading("Transaction submitted, waiting for confirmation...", { id: "tx" });
+                const tx = await contract[fn](...args);
+                toast.loading("Waiting for confirmation…", { id: "tx" });
                 const receipt = await tx.wait();
-                toast.success("Transaction confirmed on-chain!", { id: "tx" });
+                toast.success("Recorded on-chain", { id: "tx" });
                 return receipt.hash;
             } catch (err: unknown) {
                 toast.dismiss("tx");
                 if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "ACTION_REJECTED") {
-                    throw new Error("Transaction rejected by user");
+                    throw new Error("You rejected the transaction in your wallet");
                 }
                 throw err;
             }
         },
-        [isConnected, isCorrectChain, getSigner]
+        [isConnected, isCorrectChain]
+    );
+
+    const submitAttestation = useCallback(
+        (proof: string, publicInputs: string) =>
+            sendProofTx(ATTESTATION_CONTRACT, ATTESTATION_ABI, "attest", proof, publicInputs),
+        [sendProofTx]
     );
 
     const submitKYC = useCallback(
-        async (proof: string, publicInputs: string): Promise<string> => {
-            if (!isConnected) throw new Error("Wallet not connected");
-            if (!isCorrectChain) throw new Error("Switch to Sepolia testnet");
-
-            const signer = await getSigner();
-            const contract = new Contract(KYC_CONTRACT, KYC_ABI, signer);
-
-            const proofBytes = proof.startsWith("0x") ? proof : "0x" + proof;
-            const inputsArray = splitPublicInputs(publicInputs);
-
-            toast.loading("Confirm KYC transaction in MetaMask...", { id: "tx" });
-
-            try {
-                const tx = await contract.verifyKYC(proofBytes, inputsArray);
-                toast.loading("KYC transaction submitted, waiting...", { id: "tx" });
-                const receipt = await tx.wait();
-                toast.success("KYC verified on-chain!", { id: "tx" });
-                return receipt.hash;
-            } catch (err: unknown) {
-                toast.dismiss("tx");
-                if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "ACTION_REJECTED") {
-                    throw new Error("Transaction rejected by user");
-                }
-                throw err;
-            }
-        },
-        [isConnected, isCorrectChain, getSigner]
+        (proof: string, publicInputs: string) => sendProofTx(KYC_CONTRACT, KYC_ABI, "verifyKYC", proof, publicInputs),
+        [sendProofTx]
     );
 
     return (
