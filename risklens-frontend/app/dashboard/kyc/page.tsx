@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { ExternalLink, Info, Loader2 } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
+import { CHAIN } from "@/lib/chain";
+import TxLink from "@/components/ui/TxLink";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -11,7 +13,7 @@ import { verifyKYC, confirmTx, extractError } from "@/lib/api";
 import { useWallet } from "@/lib/wallet-context";
 import { useAuth } from "@/lib/auth-context";
 import type { KYCResponse } from "@/lib/types";
-import { truncateHash, getEtherscanUrl } from "@/lib/utils";
+import { truncateHash } from "@/lib/utils";
 
 // Demo circuit rule (zk/risklens_kyc_circuit): codes 1–3 are treated as restricted
 const RESTRICTED_CODES = [1, 2, 3];
@@ -98,7 +100,7 @@ export default function KYCPage() {
         <div className="max-w-2xl mx-auto space-y-6">
             <PageHeader
                 title="Identity attestation"
-                description="Record a hash of your identity details on the Sepolia testnet. This is a demo, not a regulated KYC check."
+                description={`Record a hash of your identity details on ${CHAIN.name}. This is a demo, not a regulated KYC check.`}
             />
 
             <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-accent-soft">
@@ -178,16 +180,7 @@ export default function KYCPage() {
                             <div className="flex justify-between gap-4">
                                 <dt className="text-muted">Transaction</dt>
                                 <dd>
-                                    <a
-                                        href={getEtherscanUrl(result.blockchain_tx)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 font-mono text-accent-text hover:underline"
-                                    >
-                                        {truncateHash(result.blockchain_tx, 8)}
-                                        <ExternalLink className="w-3 h-3" aria-hidden="true" />
-                                        <span className="sr-only">(view on Etherscan)</span>
-                                    </a>
+                                    <TxLink hash={result.blockchain_tx} chars={8} />
                                 </dd>
                             </div>
                         )}

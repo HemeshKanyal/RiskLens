@@ -4,6 +4,7 @@ import React from "react";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
+import { CHAIN } from "@/lib/chain";
 import { useAuth } from "@/lib/auth-context";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -45,7 +46,7 @@ export default function SettingsPage() {
                 <dl>
                     <Row label="Market data">Daily closing prices (Yahoo Finance)</Row>
                     <Row label="Explanations">Local language model (Ollama)</Row>
-                    <Row label="On-chain records">Ethereum Sepolia testnet</Row>
+                    <Row label="On-chain records">{CHAIN.name}</Row>
                     <Row label="Proof system">Noir / Barretenberg</Row>
                 </dl>
             </Card>

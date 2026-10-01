@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, FlaskConical } from "lucide-react";
+import { FlaskConical } from "lucide-react";
+import TxLink from "@/components/ui/TxLink";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Disclaimer from "@/components/ui/Disclaimer";
@@ -11,7 +12,7 @@ import HoldingsTable from "@/components/analysis/HoldingsTable";
 import Findings from "@/components/analysis/Findings";
 import Suggestions from "@/components/analysis/Suggestions";
 import { buildAnalysisView } from "@/lib/analysis";
-import { formatCurrency, getEtherscanUrl, truncateHash } from "@/lib/utils";
+import { formatCurrency, truncateHash } from "@/lib/utils";
 import type { RawAnalysis } from "@/lib/types";
 
 export interface OnChainRecord {
@@ -211,16 +212,7 @@ export default function AnalysisResults({
                                         {record.status === "confirmed" ? "Snapshot hash anchored" : "Not anchored"}
                                     </Badge>
                                     {record.txHash && (
-                                        <a
-                                            href={getEtherscanUrl(record.txHash)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 text-xs font-mono text-accent-text hover:underline"
-                                        >
-                                            {truncateHash(record.txHash, 6)}
-                                            <ExternalLink className="w-3 h-3" aria-hidden="true" />
-                                            <span className="sr-only">(view on Etherscan)</span>
-                                        </a>
+                                        <TxLink hash={record.txHash} chars={6} />
                                     )}
                                 </div>
                                 <p className="mt-2 text-xs text-muted font-mono break-all">

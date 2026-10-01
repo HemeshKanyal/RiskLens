@@ -14,6 +14,7 @@ import React, {
 } from "react";
 import { BrowserProvider, JsonRpcSigner, Contract } from "ethers";
 import toast from "react-hot-toast";
+import { CHAIN } from "./chain";
 
 // Contract ABIs (minimal — only the functions we call)
 const ATTESTATION_ABI = [
@@ -24,9 +25,8 @@ const KYC_ABI = [
     "function verifyKYC(bytes calldata proof, bytes32[] calldata publicInputs) external",
 ];
 
-// Contract addresses (Sepolia)
-const ATTESTATION_CONTRACT = "0x1ed23479aaccf270fCEaef4Ab74A07385e707608";
-const KYC_CONTRACT = "0x72b3e0d8264d42b219A54D52694e26235E664E35";
+const ATTESTATION_CONTRACT = CHAIN.attestationContract;
+const KYC_CONTRACT = CHAIN.kycContract;
 
 interface WalletContextValue {
     address: string | null;
@@ -42,7 +42,7 @@ interface WalletContextValue {
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
-const SEPOLIA_CHAIN_ID = 11155111;
+const TARGET_CHAIN_ID = CHAIN.id;
 
 function splitPublicInputs(hex: string): string[] {
     let cleaned = hex.startsWith("0x") ? hex.slice(2) : hex;
@@ -61,7 +61,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [isConnecting, setIsConnecting] = useState(false);
 
     const isConnected = !!address;
-    const isCorrectChain = chainId === SEPOLIA_CHAIN_ID;
+    const isCorrectChain = chainId === TARGET_CHAIN_ID;
 
     // Listen for account/chain changes
     useEffect(() => {
@@ -124,16 +124,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const chain = parseInt(chainIdHex, 16);
             setChainId(chain);
 
-            if (chain !== SEPOLIA_CHAIN_ID) {
-                // Try to switch to Sepolia
+            if (chain !== TARGET_CHAIN_ID) {
+                const chainIdHex = `0x${TARGET_CHAIN_ID.toString(16)}`;
                 try {
                     await window.ethereum.request({
                         method: "wallet_switchEthereumChain",
-                        params: [{ chainId: "0xaa36a7" }], // Sepolia
+                        params: [{ chainId: chainIdHex }],
                     });
-                    setChainId(SEPOLIA_CHAIN_ID);
+                    setChainId(TARGET_CHAIN_ID);
                 } catch {
-                    toast.error("Please switch to Sepolia testnet in MetaMask");
+                    // Unknown to the wallet (e.g. a local chain): offer to add it
+                    try {
+                        if (!CHAIN.rpcUrl) throw new Error("no rpc url");
+                        await window.ethereum.request({
+                            method: "wallet_addEthereumChain",
+                            params: [{
+                                chainId: chainIdHex,
+                                chainName: CHAIN.name,
+                                rpcUrls: [CHAIN.rpcUrl],
+                                nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                            }],
+                        });
+                        setChainId(TARGET_CHAIN_ID);
+                    } catch {
+                        toast.error(`Switch your wallet to ${CHAIN.name}`);
+                    }
                 }
             }
 

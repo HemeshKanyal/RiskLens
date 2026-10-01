@@ -23,7 +23,7 @@ export default function WalletButton() {
                 {!isCorrectChain && (
                     <span className="text-[11px] text-warning-text inline-flex items-center gap-1">
                         <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-                        Use Sepolia
+                        Wrong network
                     </span>
                 )}
                 <button

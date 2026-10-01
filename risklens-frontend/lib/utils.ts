@@ -87,13 +87,6 @@ export function truncateHash(hash: string, chars = 8): string {
 }
 
 /**
- * Get Etherscan URL for a transaction hash (Sepolia testnet).
- */
-export function getEtherscanUrl(txHash: string): string {
-  return `https://sepolia.etherscan.io/tx/${txHash}`;
-}
-
-/**
  * Capitalize first letter of a string.
  */
 export function capitalize(str: string): string {

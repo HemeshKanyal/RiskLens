@@ -14,7 +14,7 @@ from PIL import Image
 logger = logging.getLogger("risklens.ocr")
 
 OLLAMA_BASE = os.getenv("OLLAMA_URL", "http://localhost:11434")
-VISION_MODEL = "moondream"  # Lightweight vision model (1.7GB) for better VRAM stability
+VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "moondream")  # small enough for ~4 GB VRAM
 
 
 EXTRACTION_PROMPT = """Extract all investment holdings from this screenshot into a JSON list.

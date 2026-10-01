@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import TxLink from "@/components/ui/TxLink";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Skeleton from "@/components/ui/Skeleton";
 import type { PortfolioSnapshot } from "@/lib/types";
-import { formatCurrency, formatDate, getEtherscanUrl, truncateHash } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 export function snapshotValue(p: PortfolioSnapshot) {
     return p.assets.reduce((sum, a) => sum + (a.value || 0), 0);
@@ -57,16 +57,7 @@ export default function RecentSnapshots({
                                     <td className="py-3 pr-3 text-right tabular-nums text-fg whitespace-nowrap">{formatCurrency(snapshotValue(p))}</td>
                                     <td className="py-3 pr-5 sm:pr-6 text-right whitespace-nowrap">
                                         {p.blockchain_tx ? (
-                                            <a
-                                                href={getEtherscanUrl(p.blockchain_tx)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 text-xs font-mono text-accent-text hover:underline"
-                                            >
-                                                {truncateHash(p.blockchain_tx, 4)}
-                                                <ExternalLink className="w-3 h-3" aria-hidden="true" />
-                                                <span className="sr-only">(view on Etherscan)</span>
-                                            </a>
+                                            <TxLink hash={p.blockchain_tx} chars={4} />
                                         ) : (
                                             <Badge>Not anchored</Badge>
                                         )}

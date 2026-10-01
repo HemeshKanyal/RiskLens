@@ -2,7 +2,7 @@ import sys
 import os
 
 # allow backend to access ai_phase1 and ai_phase2
-sys.path.append(os.path.abspath("../"))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from ai_phase2.ai_engine_v2 import PortfolioAIv2
 from ai_phase3.behavioral_engine import BehavioralEngine

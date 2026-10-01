@@ -2,6 +2,7 @@ import Link from "next/link";
 import Navbar from "@/components/landing/Navbar";
 import Footer from "@/components/landing/Footer";
 import ProductPreview from "@/components/landing/ProductPreview";
+import { CHAIN } from "@/lib/chain";
 import { buttonStyles } from "@/components/ui/Button";
 
 const MEASURES = [
@@ -99,9 +100,9 @@ export default function Home() {
                         <div>
                             <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-fg">What the on-chain record is</h2>
                             <p className="mt-4 text-sm text-fg-2 leading-relaxed">
-                                Each saved analysis is hashed and the hash is recorded on the Ethereum Sepolia testnet. That
+                                Each saved analysis is hashed and the hash is recorded on {CHAIN.name}. That
                                 lets you show a snapshot existed at a point in time and hasn&apos;t been edited since. It
-                                doesn&apos;t prove the analysis is correct, and it isn&apos;t on mainnet.
+                                doesn&apos;t prove the analysis is correct, and it isn&apos;t on Ethereum mainnet.
                             </p>
                         </div>
                     </div>

@@ -8,7 +8,7 @@ import os
 import logging
 
 # allow backend to access ai_phase2
-sys.path.append(os.path.abspath("../"))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from ai_phase2.backtest_engine import BacktestEngine
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { CHAIN } from "@/lib/chain";
 import { CheckCircle, Loader2, XCircle, Wallet } from "lucide-react";
 
 // Only states the client can actually observe. The backend runs pricing,
@@ -24,7 +25,7 @@ const DEFAULT_SERVER_TASKS = [
     "Resolve live prices for assets without a value",
     "Compute allocation, volatility and correlation metrics",
     "Generate a plain-language explanation",
-    "Hash the snapshot and anchor it on Sepolia testnet",
+    `Hash the snapshot and anchor it on ${CHAIN.name}`,
 ];
 
 // Counts from mount; the parent remounts this component (via `key`) per run.

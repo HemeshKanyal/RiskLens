@@ -1,7 +1,8 @@
 import { Info } from "lucide-react";
 
-export const DISCLAIMER =
-    "RiskLens is an educational tool, not investment advice. Scores are model estimates based on historical prices and can be wrong. On-chain records are on the Sepolia testnet.";
+import { CHAIN } from "@/lib/chain";
+
+export const DISCLAIMER = `RiskLens is an educational tool, not investment advice. Scores are model estimates based on historical prices and can be wrong. On-chain records are on ${CHAIN.name}.`;
 
 export default function Disclaimer({ asOf }: { asOf?: string }) {
     return (

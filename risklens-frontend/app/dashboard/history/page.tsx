@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ExternalLink, History } from "lucide-react";
+import { ChevronDown, History } from "lucide-react";
+import TxLink from "@/components/ui/TxLink";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
@@ -16,7 +17,7 @@ import Findings from "@/components/analysis/Findings";
 import { getDecisionLogs, extractError } from "@/lib/api";
 import { buildAnalysisView } from "@/lib/analysis";
 import type { DecisionLog } from "@/lib/types";
-import { formatDate, formatRelativeTime, truncateHash, getEtherscanUrl } from "@/lib/utils";
+import { formatDate, formatRelativeTime, truncateHash } from "@/lib/utils";
 import { cn } from "@/lib/cn";
 
 type Filter = "all" | "portfolio_analysis" | "kyc_verification";
@@ -64,16 +65,7 @@ function DecisionDetails({ decision }: { decision: DecisionLog }) {
                 <div className="flex items-center justify-between gap-4 text-xs">
                     <span className="text-muted">Transaction</span>
                     {decision.blockchain_tx ? (
-                        <a
-                            href={getEtherscanUrl(decision.blockchain_tx)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 font-mono text-accent-text hover:underline"
-                        >
-                            {truncateHash(decision.blockchain_tx, 8)}
-                            <ExternalLink className="w-3 h-3" aria-hidden="true" />
-                            <span className="sr-only">(view on Etherscan)</span>
-                        </a>
+                        <TxLink hash={decision.blockchain_tx} chars={8} />
                     ) : (
                         <span className="text-muted">None</span>
                     )}

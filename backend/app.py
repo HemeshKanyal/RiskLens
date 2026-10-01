@@ -18,6 +18,7 @@ from zk_service import generate_zk_proof
 from zk_kyc_service import generate_kyc_proof
 from blockchain_service import submit_attestation
 from blockchain_kyc_service import submit_kyc_verification
+import chain
 from pricing_service import get_asset_price, get_bulk_prices
 from simulation_service import run_simulation
 from backtest_service import run_historical_backtest
@@ -351,22 +352,26 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
     claim_string = json.dumps(ai_result)
     claim_hash = hashlib.sha256(claim_string.encode()).hexdigest()
 
-    # Step 5 — ZK proof
+    # Steps 5–6 — ZK proof + on-chain anchoring. Both are optional: the
+    # analysis is saved and returned even if either is unavailable.
+    proof, public_inputs = None, None
+    tx_hash = None
+    blockchain_error = None
     try:
         proof, public_inputs = await run_in_threadpool(generate_zk_proof, snapshot_hash, claim_hash)
     except Exception as e:
-        logger.error("ZK proof generation failed: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"ZK proof generation failed: {str(e)}")
+        logger.warning("ZK proof generation failed (non-fatal): %s", str(e))
+        blockchain_error = "Proof generation is unavailable, so this snapshot wasn't anchored on-chain."
 
-    # Step 6 — blockchain attestation (graceful — save results even if chain fails)
-    tx_hash = None
-    blockchain_error = None
-    if not wallet_mode:
-        try:
-            tx_hash = await run_in_threadpool(submit_attestation, proof, public_inputs)
-        except Exception as e:
-            blockchain_error = str(e)
-            logger.warning("Blockchain attestation failed (non-fatal): %s", blockchain_error)
+    if proof and not wallet_mode:
+        if not chain.is_configured("CONTRACT_ADDRESS"):
+            blockchain_error = "On-chain anchoring is disabled on this server."
+        else:
+            try:
+                tx_hash = await run_in_threadpool(submit_attestation, proof, public_inputs)
+            except Exception as e:
+                logger.warning("Blockchain attestation failed (non-fatal): %s", str(e))
+                blockchain_error = f"On-chain submission failed: {e}"
 
     # Step 7 — Save portfolio snapshot to MongoDB (always save)
     portfolios_collection = database.get_portfolios_collection()
@@ -413,7 +418,7 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
         response["live_prices_used"] = live_prices_used
 
     if blockchain_error:
-        response["blockchain_warning"] = f"Proof is valid but on-chain submission failed: {blockchain_error}"
+        response["blockchain_warning"] = blockchain_error
 
     return response
 
@@ -445,12 +450,14 @@ async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_use
     # Step 2 — Submit proof to RiskLensZKKYC contract on-chain (graceful)
     tx_hash = None
     blockchain_error = None
-    if not wallet_mode:
+    if not wallet_mode and not chain.is_configured("KYC_CONTRACT_ADDRESS"):
+        blockchain_error = "On-chain anchoring is disabled on this server."
+    elif not wallet_mode:
         try:
             tx_hash = await run_in_threadpool(submit_kyc_verification, proof, public_inputs)
         except Exception as e:
-            blockchain_error = str(e)
-            logger.warning("KYC blockchain submission failed (non-fatal): %s", blockchain_error)
+            logger.warning("KYC blockchain submission failed (non-fatal): %s", str(e))
+            blockchain_error = f"On-chain submission failed: {e}"
 
     # Step 3 — Save KYC decision log to MongoDB (always save)
     decisions_collection = database.get_decisions_collection()
@@ -483,7 +490,7 @@ async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_use
     }
 
     if blockchain_error:
-        response["blockchain_warning"] = f"Proof is valid but on-chain submission failed: {blockchain_error}"
+        response["blockchain_warning"] = blockchain_error
 
     return response
 
