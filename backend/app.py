@@ -166,8 +166,12 @@ def validate_kyc_request(request: KYCRequest):
     if not request.full_name or len(request.full_name.strip()) < 2:
         raise HTTPException(status_code=400, detail="Full name must be at least 2 characters.")
 
-    if request.age < 18:
-        raise HTTPException(status_code=400, detail="User must be at least 18 years old.")
+    # The circuit takes age and country_code as u8, so out-of-range values fail proving
+    if request.age < 18 or request.age > 120:
+        raise HTTPException(status_code=400, detail="Age must be between 18 and 120.")
+
+    if not 1 <= request.country_code <= 255:
+        raise HTTPException(status_code=400, detail="Country code must be between 1 and 255.")
 
     if request.country_code in (1, 2, 3):
         raise HTTPException(status_code=400, detail="Country code is in the blacklisted range.")
@@ -198,6 +202,10 @@ async def shutdown_db_client():
 @app.post("/auth/register", response_model=UserResponse)
 async def register(user: UserCreate, request: Request):
     check_rate_limit(request.client.host, "register")
+
+    # bcrypt only uses the first 72 bytes, and recent versions reject longer input
+    if len(user.password) < 8 or len(user.password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="Password must be 8–72 characters")
 
     users_collection = database.get_users_collection()
     existing_user = await users_collection.find_one({"email": user.email})
@@ -860,12 +868,14 @@ async def get_decision_audit(current_user: UserResponse = Depends(auth.get_curre
         snap = decision.get("snapshot_hash", "")
         user_feedback = feedback_lookup.get(snap)
         
+        analysis = decision.get("ai_analysis") or {}
+        risk = analysis.get("risk") or {}
         entry = {
             "timestamp": decision.get("created_at"),
             "snapshot_hash": snap,
-            "ai_risk_score": decision.get("ai_analysis", {}).get("risk", {}).get("risk_score"),
-            "ai_risk_level": decision.get("ai_analysis", {}).get("risk", {}).get("risk_level"),
-            "had_rebalancing": bool(decision.get("ai_analysis", {}).get("rebalancing", {}).get("actions")),
+            "ai_risk_score": risk.get("risk_score"),
+            "ai_risk_level": risk.get("risk_level"),
+            "had_rebalancing": bool((analysis.get("rebalancing") or {}).get("suggestions")),
             "user_action": user_feedback.get("action") if user_feedback else "no_response",
             "user_reasoning": user_feedback.get("reasoning") if user_feedback else None,
             "market_volatility": user_feedback.get("market_volatility") if user_feedback else None,

@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 import logging
 
+import pandas as pd
+
 from ai_phase2.data_collector import MarketDataCollector
 from ai_phase2.feature_engine import FeatureEngine
 from ai_phase2.risk_metrics import RiskMetrics
@@ -90,17 +92,51 @@ class BacktestEngine:
                 max_dd = m["max_drawdown_pct"]
                 worst_asset = sym
 
+        path = self._portfolio_path(features, portfolio)
+
         return {
             "event_id": event_id,
             "event_name": event["name"],
             "period": f"{event['start']} to {event['end']}",
             "context": event["context"],
             "portfolio_metrics": {
-                "max_drawdown_pct": portfolio_intel["portfolio_volatility_pct"], # Proxy for crisis volatility
+                "max_drawdown_pct": path["max_drawdown_pct"],
+                "total_return_pct": path["total_return_pct"],
+                "volatility_pct": portfolio_intel["portfolio_volatility_pct"],
                 "diversification_ratio": portfolio_intel["diversification_ratio"]
             },
             "worst_performing_asset": worst_asset,
             "worst_asset_drawdown": max_dd,
             "per_asset_metrics": per_asset,
             "data_coverage": f"{len(market_data)} / {len(portfolio['assets'])} assets tracked"
+        }
+
+    @staticmethod
+    def _portfolio_path(features: Dict[str, pd.DataFrame], portfolio: Dict) -> Dict[str, Optional[float]]:
+        """
+        Buy-and-hold value path of the current weights over the event window.
+
+        Weights come from the portfolio's values, renormalised over the assets
+        that have data for the window. Prices are forward-filled so assets on
+        different trading calendars (e.g. crypto vs stocks) line up.
+        """
+        values = {a["symbol"]: a.get("value") or 0 for a in portfolio.get("assets", [])}
+        symbols = [s for s in features if values.get(s, 0) > 0]
+        total = sum(values[s] for s in symbols)
+        if not symbols or total <= 0:
+            return {"max_drawdown_pct": None, "total_return_pct": None}
+
+        closes = pd.concat(
+            {s: features[s].set_index("date")["close"] for s in symbols}, axis=1
+        ).sort_index().ffill().dropna()
+        if len(closes) < 2:
+            return {"max_drawdown_pct": None, "total_return_pct": None}
+
+        weights = pd.Series({s: values[s] / total for s in symbols})
+        value = (closes / closes.iloc[0]).mul(weights, axis=1).sum(axis=1)
+        drawdown = value / value.cummax() - 1
+
+        return {
+            "max_drawdown_pct": round(float(drawdown.min()) * 100, 2),
+            "total_return_pct": round(float(value.iloc[-1] - 1) * 100, 2),
         }
