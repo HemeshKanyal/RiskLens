@@ -4,6 +4,7 @@ Uses Ollama vision model (llava) to extract portfolio data from screenshots.
 """
 
 import base64
+import os
 import json
 import logging
 import requests
@@ -12,7 +13,7 @@ from PIL import Image
 
 logger = logging.getLogger("risklens.ocr")
 
-OLLAMA_BASE = "http://localhost:11434"
+OLLAMA_BASE = os.getenv("OLLAMA_URL", "http://localhost:11434")
 VISION_MODEL = "moondream"  # Lightweight vision model (1.7GB) for better VRAM stability
 
 

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, File, UploadFile
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from typing import List
 from fastapi.security import OAuth2PasswordRequestForm
 from models import (
@@ -286,7 +287,7 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
         asset_data = asset.dict()
 
         if asset_data.get("value") is None:
-            live_price = get_asset_price(asset_data["symbol"], asset_data["type"])
+            live_price = await run_in_threadpool(get_asset_price, asset_data["symbol"], asset_data["type"])
             if live_price is None:
                 raise HTTPException(
                     status_code=400,
@@ -314,7 +315,8 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
             {"_id": 0, "snapshot_hash": 1, "ai_analysis.summary.assets": 1}
         ).to_list(length=100)
         
-        ai_result = run_ai_analysis(
+        ai_result = await run_in_threadpool(
+            run_ai_analysis,
             portfolio_dict, 
             request.risk_profile, 
             request.lookback_days,
@@ -328,7 +330,7 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
     # Step 2 — LLM explanation (with Phase 3 behavioral context)
     behavioral_context = ai_result.pop("_behavioral_llm_context", None)
     try:
-        explanation = generate_llm_explanation(ai_result, behavioral_context=behavioral_context)
+        explanation = await run_in_threadpool(generate_llm_explanation, ai_result, behavioral_context=behavioral_context)
     except Exception as e:
         logger.warning("LLM explanation failed: %s", str(e))
         explanation = "LLM explanation unavailable at the moment."
@@ -343,7 +345,7 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
 
     # Step 5 — ZK proof
     try:
-        proof, public_inputs = generate_zk_proof(snapshot_hash, claim_hash)
+        proof, public_inputs = await run_in_threadpool(generate_zk_proof, snapshot_hash, claim_hash)
     except Exception as e:
         logger.error("ZK proof generation failed: %s", str(e))
         raise HTTPException(status_code=500, detail=f"ZK proof generation failed: {str(e)}")
@@ -353,7 +355,7 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
     blockchain_error = None
     if not wallet_mode:
         try:
-            tx_hash = submit_attestation(proof, public_inputs)
+            tx_hash = await run_in_threadpool(submit_attestation, proof, public_inputs)
         except Exception as e:
             blockchain_error = str(e)
             logger.warning("Blockchain attestation failed (non-fatal): %s", blockchain_error)
@@ -420,7 +422,8 @@ async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_use
 
     # Step 1 — Generate ZK proof from user's KYC data
     try:
-        proof, public_inputs, identity_hash = generate_kyc_proof(
+        proof, public_inputs, identity_hash = await run_in_threadpool(
+            generate_kyc_proof,
             full_name=request.full_name,
             date_of_birth=request.date_of_birth,
             country_code=request.country_code,
@@ -436,7 +439,7 @@ async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_use
     blockchain_error = None
     if not wallet_mode:
         try:
-            tx_hash = submit_kyc_verification(proof, public_inputs)
+            tx_hash = await run_in_threadpool(submit_kyc_verification, proof, public_inputs)
         except Exception as e:
             blockchain_error = str(e)
             logger.warning("KYC blockchain submission failed (non-fatal): %s", blockchain_error)
@@ -463,7 +466,7 @@ async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_use
     logger.info("KYC decision saved for user: %s (tx: %s)", current_user.email, tx_hash or "none")
 
     response = {
-        "status": "KYC verified on-chain" if tx_hash else "KYC proof valid but chain submission failed",
+        "status": "Attestation recorded on-chain" if tx_hash else "Proof generated but chain submission failed",
         "identity_commitment_hash": identity_hash,
         "zk_proof": proof,
         "public_inputs": public_inputs,
@@ -620,7 +623,7 @@ async def extract_portfolio_from_screenshot(
             content = await file.read()
             images_bytes.append(content)
         
-        result = parse_screenshots(images_bytes)
+        result = await run_in_threadpool(parse_screenshots, images_bytes)
         return result
         
     except Exception as e:
@@ -756,7 +759,8 @@ async def simulate_portfolio(
             {"_id": 0, "snapshot_hash": 1, "ai_analysis.summary.assets": 1}
         ).to_list(length=100)
         
-        sim_result = run_simulation(
+        sim_result = await run_in_threadpool(
+            run_simulation,
             portfolio_dict, 
             request.risk_profile, 
             request.lookback_days,
@@ -765,7 +769,7 @@ async def simulate_portfolio(
         
         # LLM explanation for simulation (with behavioral context)
         behavioral_context = sim_result.pop("_behavioral_llm_context", None)
-        explanation = generate_llm_explanation(sim_result, behavioral_context=behavioral_context)
+        explanation = await run_in_threadpool(generate_llm_explanation, sim_result, behavioral_context=behavioral_context)
         
         return {
             "is_simulation": True,
@@ -797,10 +801,10 @@ async def historical_backtest(
     
     try:
         # Run historical backtest
-        backtest_result = run_historical_backtest(portfolio_dict, request.event_id)
+        backtest_result = await run_in_threadpool(run_historical_backtest, portfolio_dict, request.event_id)
         
         # LLM explanation for the historical event
-        explanation = generate_llm_explanation(backtest_result)
+        explanation = await run_in_threadpool(generate_llm_explanation, backtest_result)
         
         return {
             "is_backtest": True,
@@ -1050,4 +1054,4 @@ async def export_portfolio(format: str = "csv", current_user: UserResponse = Dep
     else:
         raise HTTPException(status_code=400, detail="Unsupported format. Only csv and pdf are supported.")
 
-
+

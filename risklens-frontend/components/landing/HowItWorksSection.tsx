@@ -55,7 +55,7 @@ export default function HowItWorksSection() {
       ),
       title: "Verify Portfolio",
       description:
-        "Portfolio snapshots can be verified using blockchain-based proof of history.",
+        "Each snapshot's hash is timestamped on-chain so it can be checked for later edits.",
     },
   ];
 

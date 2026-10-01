@@ -12,7 +12,13 @@ from models import UserResponse, UserInDB
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY or len(SECRET_KEY) < 32:
+    # A guessable key lets anyone forge login tokens, so refuse to start.
+    raise RuntimeError(
+        "SECRET_KEY must be set to a random string of at least 32 characters "
+        "(e.g. `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`)"
+    )
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")

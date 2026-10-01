@@ -1,11 +1,9 @@
 import Link from "next/link";
+import { DISCLAIMER } from "@/components/ui/Disclaimer";
 
 export default function Footer() {
   const links = [
-    { label: "Docs", href: "#" },
-    { label: "Privacy", href: "#" },
-    { label: "GitHub", href: "#" },
-    { label: "Contact", href: "#" },
+    { label: "GitHub", href: "https://github.com/HemeshKanyal/RiskLens" },
   ];
 
   return (
@@ -34,6 +32,9 @@ export default function Footer() {
           ))}
         </nav>
       </div>
+      <p className="max-w-6xl mx-auto mt-6 text-[11px] leading-relaxed text-gray-500 text-center md:text-left">
+        {DISCLAIMER}
+      </p>
     </footer>
   );
 }

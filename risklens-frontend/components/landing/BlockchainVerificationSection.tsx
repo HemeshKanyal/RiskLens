@@ -4,10 +4,10 @@ import { motion } from "framer-motion";
 
 export default function BlockchainVerificationSection() {
   const bullets = [
-    { label: "Tamper-proof portfolio snapshots", color: "bg-blue-400" },
-    { label: "Blockchain-backed verification", color: "bg-purple-400" },
-    { label: "Transparent historical analytics", color: "bg-cyan-400" },
-    { label: "Cryptographic proof of portfolio history", color: "bg-emerald-400" },
+    { label: "Tamper-evident portfolio snapshots", color: "bg-blue-400" },
+    { label: "Snapshot hashes timestamped on a public chain", color: "bg-purple-400" },
+    { label: "Auditable history of past analyses", color: "bg-cyan-400" },
+    { label: "Re-hash any saved snapshot to check it wasn't altered", color: "bg-emerald-400" },
   ];
 
   const steps = [
@@ -32,7 +32,7 @@ export default function BlockchainVerificationSection() {
         </svg>
       ),
       title: "Proof Generated",
-      subtitle: "Cryptographic hash created",
+      subtitle: "SHA-256 hash of the snapshot",
     },
     {
       icon: (
@@ -43,7 +43,7 @@ export default function BlockchainVerificationSection() {
         </svg>
       ),
       title: "Stored On Chain",
-      subtitle: "Immutable record saved",
+      subtitle: "Hash recorded on Sepolia testnet",
     },
     {
       icon: (
@@ -53,7 +53,7 @@ export default function BlockchainVerificationSection() {
         </svg>
       ),
       title: "Verified Anytime",
-      subtitle: "Transparent & trustless",
+      subtitle: "Anyone can check the hash on Etherscan",
     },
   ];
 
@@ -106,8 +106,8 @@ export default function BlockchainVerificationSection() {
           </motion.h2>
 
           <motion.p variants={itemAnim} className="mt-5 text-gray-400 text-lg leading-relaxed">
-            RiskLens combines AI analytics with blockchain verification to
-            ensure portfolio insights remain transparent and tamper-proof.
+            Each analysis is hashed and the hash is timestamped on-chain, so you
+            can later show that a saved snapshot hasn&apos;t been changed.
           </motion.p>
         </div>
 
@@ -123,9 +123,10 @@ export default function BlockchainVerificationSection() {
             </h3>
 
             <p className="mt-5 text-gray-400 leading-relaxed">
-              RiskLens stores portfolio snapshots and risk insights as
-              verifiable proofs so analytics remain transparent and
-              tamper-proof.
+              RiskLens anchors a hash of every portfolio snapshot on the
+              Sepolia testnet. The hash proves when a snapshot existed and
+              that it hasn&apos;t been edited since. It does not prove the
+              analysis itself is correct.
             </p>
 
             <ul className="mt-8 space-y-4">

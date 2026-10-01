@@ -1,203 +1,136 @@
 "use client";
 
-import React from "react";
-import { CheckCircle, Circle, Loader2, XCircle, Code2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { CheckCircle, Loader2, XCircle, Wallet } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Only states the client can actually observe. The backend runs pricing,
+// risk analysis, explanation and proof generation inside a single request,
+// so we don't pretend to know which of those is currently running.
 export type AnalysisStep =
     | "idle"
-    | "pricing"
-    | "ai_analysis"
-    | "zk_proof"
-    | "blockchain"
+    | "server"
+    | "wallet"
     | "done"
     | "error";
 
 interface AnalysisProgressProps {
     currentStep: AnalysisStep;
     error?: string;
+    // Server-side work items to list for context while waiting
+    serverTasks?: string[];
 }
 
-const STEPS = [
-    {
-        key: "pricing",
-        label: "Fetching Live Prices",
-        description: "Resolving asset values from market data",
-    },
-    {
-        key: "ai_analysis",
-        label: "Running AI Analysis",
-        description: "Phase 1 rules + Phase 2 market intelligence",
-    },
-    {
-        key: "zk_proof",
-        label: "Generating ZK Proof",
-        description: "Computing Noir cryptographic circuit on-device",
-    },
-    {
-        key: "blockchain",
-        label: "Submitting to Blockchain",
-        description: "Recording attestation on Sepolia testnet",
-    },
-] as const;
+const DEFAULT_SERVER_TASKS = [
+    "Resolve live prices for assets without a value",
+    "Compute allocation, volatility and correlation metrics",
+    "Generate a plain-language explanation",
+    "Hash the snapshot and anchor it on Sepolia testnet",
+];
+
+// Counts from mount; the parent remounts this component (via `key`) per run.
+function useElapsedSeconds(running: boolean) {
+    const [start] = useState(() => Date.now());
+    const [seconds, setSeconds] = useState(0);
+
+    useEffect(() => {
+        if (!running) return;
+        const id = setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 1000);
+        return () => clearInterval(id);
+    }, [running, start]);
+
+    return seconds;
+}
+
+function formatElapsed(totalSeconds: number) {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`;
+}
 
 export default function AnalysisProgress({
     currentStep,
     error,
+    serverTasks = DEFAULT_SERVER_TASKS,
 }: AnalysisProgressProps) {
+    const isRunning = currentStep === "server" || currentStep === "wallet";
+    const elapsed = useElapsedSeconds(isRunning);
+
     if (currentStep === "idle") return null;
 
-    const stepOrder = STEPS.map((s) => s.key);
-    const currentIndex = stepOrder.indexOf(
-        currentStep as (typeof stepOrder)[number]
-    );
+    const title =
+        currentStep === "done"
+            ? "Analysis complete"
+            : currentStep === "error"
+              ? "Analysis failed"
+              : currentStep === "wallet"
+                ? "Waiting for wallet signature"
+                : "Analyzing portfolio";
 
     return (
-        <motion.div 
+        <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/10 p-6 space-y-5 shadow-[0_0_30px_rgba(0,0,0,0.5)] overflow-hidden relative"
+            className="bg-white/5 rounded-2xl border border-white/10 p-6 space-y-4"
+            role="status"
+            aria-live="polite"
         >
-            {/* Background animated pulse if ZK proofing */}
-            {currentStep === "zk_proof" && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: [0.1, 0.2, 0.1] }}
-                    transition={{ repeat: Infinity, duration: 2 }}
-                    className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 -z-10"
-                />
+            <div className="flex items-center gap-3">
+                {currentStep === "done" ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                ) : currentStep === "error" ? (
+                    <XCircle className="w-5 h-5 text-red-400" />
+                ) : currentStep === "wallet" ? (
+                    <Wallet className="w-5 h-5 text-blue-400 animate-pulse" />
+                ) : (
+                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                )}
+                <h3 className="text-sm font-semibold text-white">{title}</h3>
+                {isRunning && (
+                    <span className="ml-auto text-xs text-gray-400 tabular-nums">
+                        {formatElapsed(elapsed)}
+                    </span>
+                )}
+            </div>
+
+            {/* Indeterminate bar: we don't know real progress, so we don't fake a percentage */}
+            {isRunning && (
+                <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden relative">
+                    <motion.div
+                        className="absolute top-0 h-full w-1/3 rounded-full bg-blue-500"
+                        animate={{ left: ["-33%", "100%"] }}
+                        transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
+                    />
+                </div>
             )}
 
-            <div className="flex items-center gap-3 mb-2">
-                {currentStep === "done" ? (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><CheckCircle className="w-6 h-6 text-emerald-400" /></motion.div>
-                ) : currentStep === "error" ? (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><XCircle className="w-6 h-6 text-red-400" /></motion.div>
-                ) : currentStep === "zk_proof" ? (
-                    <Code2 className="w-6 h-6 text-emerald-400 animate-pulse" />
-                ) : (
-                    <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
-                )}
-                <h3 className="text-sm font-semibold text-white tracking-tight">
-                    {currentStep === "done"
-                        ? "Analysis & Attestation Complete"
-                        : currentStep === "error"
-                          ? "Analysis Failed"
-                          : currentStep === "zk_proof"
-                            ? "Computing Cryptographic ZK Proof..."
-                            : "Analyzing Portfolio..."}
-                </h3>
-            </div>
+            {currentStep === "server" && (
+                <div className="space-y-2">
+                    <p className="text-xs text-gray-400">
+                        The server is working through these steps. This usually takes under a
+                        minute but can take longer when market data or the testnet is slow.
+                    </p>
+                    <ul className="space-y-1 text-xs text-gray-300 list-disc pl-5">
+                        {serverTasks.map((task) => (
+                            <li key={task}>{task}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
-            {/* Progress bar */}
-            <div className="h-2 rounded-full bg-white/[0.04] overflow-hidden relative">
-                <motion.div
-                    className={`absolute left-0 top-0 h-full rounded-full ${
-                        currentStep === "done"
-                            ? "bg-emerald-500"
-                            : currentStep === "error"
-                              ? "bg-red-500"
-                              : currentStep === "zk_proof"
-                                ? "bg-gradient-to-r from-emerald-400 to-cyan-500"
-                                : "bg-gradient-to-r from-blue-500 to-purple-500"
-                    }`}
-                    initial={{ width: "0%" }}
-                    animate={{
-                        width: currentStep === "done"
-                            ? "100%"
-                            : currentStep === "error"
-                              ? `${((currentIndex + 1) / STEPS.length) * 100}%`
-                              : `${((currentIndex + 0.5) / STEPS.length) * 100}%`
-                    }}
-                    transition={{ duration: 0.5, ease: "easeInOut" }}
-                />
-            </div>
+            {currentStep === "wallet" && (
+                <p className="text-xs text-gray-400">
+                    Analysis is ready. Confirm the transaction in your wallet to record the
+                    snapshot hash on-chain. Rejecting it will cancel this analysis.
+                </p>
+            )}
 
-            {/* Steps */}
-            <div className="space-y-4 pt-2">
-                {STEPS.map((step, idx) => {
-                    let status: "done" | "active" | "pending" | "error" =
-                        "pending";
-                    if (currentStep === "done") {
-                        status = "done";
-                    } else if (currentStep === "error" && idx <= currentIndex) {
-                        status = idx === currentIndex ? "error" : "done";
-                    } else if (idx < currentIndex) {
-                        status = "done";
-                    } else if (idx === currentIndex) {
-                        status = "active";
-                    }
-
-                    const isActive = status === "active";
-
-                    return (
-                        <motion.div
-                            key={step.key}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: status === "pending" ? 0.4 : 1, x: 0 }}
-                            transition={{ delay: idx * 0.1 }}
-                            className="flex items-start gap-4 relative"
-                        >
-                            {/* Connecting Line */}
-                            {idx !== STEPS.length - 1 && (
-                                <div className={`absolute left-2.5 top-6 w-[2px] h-6 -translate-x-1/2 ${status === "done" ? "bg-emerald-500/50" : "bg-white/[0.06]"}`} />
-                            )}
-                            
-                            <div className="mt-0.5 relative z-10 bg-[#111] rounded-full">
-                                {status === "done" ? (
-                                    <CheckCircle className="w-5 h-5 text-emerald-400" />
-                                ) : status === "active" ? (
-                                    step.key === "zk_proof" ? (
-                                        <Code2 className="w-5 h-5 text-emerald-400 animate-pulse" />
-                                    ) : (
-                                        <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                                    )
-                                ) : status === "error" ? (
-                                    <XCircle className="w-5 h-5 text-red-400" />
-                                ) : (
-                                    <Circle className="w-5 h-5 text-gray-600" />
-                                )}
-                            </div>
-                            
-                            <div>
-                                <p
-                                    className={`text-sm font-semibold tracking-wide ${
-                                        status === "done"
-                                            ? "text-emerald-400"
-                                            : status === "active"
-                                              ? step.key === "zk_proof" ? "text-emerald-300" : "text-white"
-                                              : status === "error"
-                                                ? "text-red-400"
-                                                : "text-gray-500"
-                                    }`}
-                                >
-                                    {step.label}
-                                </p>
-                                <p className={`text-xs mt-0.5 ${isActive ? "text-gray-300" : "text-gray-600"}`}>
-                                    {isActive && step.key === "zk_proof" ? (
-                                        <motion.span
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            className="font-mono text-[10px] text-emerald-400/80 mr-2"
-                                        >
-                                            [0x{Math.random().toString(16).slice(2, 8)}]
-                                        </motion.span>
-                                    ) : null}
-                                    {step.description}
-                                </p>
-                            </div>
-                        </motion.div>
-                    );
-                })}
-            </div>
-
-            {/* Error message */}
             <AnimatePresence>
                 {error && (
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
-                        className="mt-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20"
+                        className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20"
                     >
                         <p className="text-xs text-red-400">{error}</p>
                     </motion.div>

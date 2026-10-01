@@ -16,7 +16,7 @@ const outfit = Outfit({
 
 export const metadata = {
     title: "RiskLens",
-    description: "AI-powered portfolio intelligence with blockchain proof",
+    description: "Portfolio risk and diversification analysis with on-chain snapshot timestamps",
 };
 
 export default function RootLayout({

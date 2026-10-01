@@ -54,7 +54,7 @@ class SymbolRequest(BaseModel):
 # ------------------------------------------------------------------
 
 @router.post("/analyze")
-async def analyze_portfolio(request: PortfolioRequest) -> Dict[str, Any]:
+def analyze_portfolio(request: PortfolioRequest) -> Dict[str, Any]:
     """
     Full Phase 1 + Phase 2 analysis of a portfolio.
 
@@ -82,7 +82,7 @@ async def analyze_portfolio(request: PortfolioRequest) -> Dict[str, Any]:
 
 
 @router.get("/asset/{symbol}")
-async def get_asset_metrics(symbol: str, lookback_days: int = 90) -> Dict[str, Any]:
+def get_asset_metrics(symbol: str, lookback_days: int = 90) -> Dict[str, Any]:
     """
     Get historical data and risk metrics for a single asset.
     """
@@ -131,7 +131,7 @@ async def get_asset_metrics(symbol: str, lookback_days: int = 90) -> Dict[str, A
 
 
 @router.post("/quick-risk")
-async def quick_risk_score(request: PortfolioRequest) -> Dict[str, Any]:
+def quick_risk_score(request: PortfolioRequest) -> Dict[str, Any]:
     """
     Quick Phase 2-only risk assessment (no Phase 1 merge).
     Faster endpoint for real-time dashboard updates.

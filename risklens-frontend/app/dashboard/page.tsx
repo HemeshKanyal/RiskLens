@@ -148,7 +148,7 @@ export default function DashboardPage() {
                     }
                     change={
                         hasData
-                            ? `${decisions.filter((d) => d.blockchain_status === "confirmed").length} verified on-chain`
+                            ? `${decisions.filter((d) => d.blockchain_status === "confirmed").length} anchored on-chain`
                             : "Run your first analysis"
                     }
                     changeType={hasData ? "positive" : "neutral"}

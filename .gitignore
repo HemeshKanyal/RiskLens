@@ -3,6 +3,7 @@ dist/
 coverage/
 .env
 .env.*
+!.env.example
 target/
 .DS_Store
 
@@ -17,3 +18,8 @@ env/
 # IDEs
 .vscode/
 .idea/
+
+# Generated data / build outputs
+ai_phase2/.cache/
+zk/*/proof/
+zk/*/Prover.toml

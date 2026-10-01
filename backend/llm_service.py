@@ -1,8 +1,11 @@
+import os
 import requests
 import logging
 import json
 
 logger = logging.getLogger("risklens.llm")
+
+OLLAMA_BASE = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
 
 def _trim_analysis(ai_result):
@@ -88,7 +91,7 @@ Provide clear, explainable insights that help the investor make wise decisions.
     try:
         logger.info("Requesting LLM explanation from Ollama...")
         response = requests.post(
-            "http://localhost:11434/api/generate",
+            f"{OLLAMA_BASE}/api/generate",
             json={
                 "model": "llama3.1:8b",
                 "prompt": prompt,

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Card from "@/components/ui/Card";
+import Disclaimer from "@/components/ui/Disclaimer";
 import AssetForm from "@/components/portfolio/AssetForm";
 import ScreenshotUploader from "@/components/portfolio/ScreenshotUploader";
 import AnalysisProgress from "@/components/portfolio/AnalysisProgress";
@@ -32,6 +33,12 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode; available: bool
     { key: "broker", label: "Connect Broker", icon: <Link2 className="w-4 h-4" />, available: false },
 ];
 
+const SIMULATION_TASKS = [
+    "Resolve live prices for assets without a value",
+    "Compute allocation, volatility and correlation metrics",
+    "Generate a plain-language explanation (nothing is saved or recorded on-chain)",
+];
+
 export default function PortfolioPage() {
     const [activeTab, setActiveTab] = useState<TabKey>("manual");
     const [assets, setAssets] = useState<Asset[]>([
@@ -44,6 +51,9 @@ export default function PortfolioPage() {
     const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
     const [simulationResult, setSimulationResult] = useState<SimulationResponse | null>(null);
     const [showFullExplanation, setShowFullExplanation] = useState(false);
+    const [resultTime, setResultTime] = useState<string | null>(null);
+    const [runMode, setRunMode] = useState<"analyze" | "simulate">("analyze");
+    const [runId, setRunId] = useState(0);
 
     const handleScreenshotExtracted = (extractedAssets: Asset[]) => {
         setAssets(extractedAssets);
@@ -66,14 +76,11 @@ export default function PortfolioPage() {
         setAnalysisResult(null);
         setSimulationResult(null);
         setAnalysisError("");
-        setAnalysisStep("pricing");
+        setRunMode("analyze");
+        setRunId((id) => id + 1);
+        setAnalysisStep("server");
 
         try {
-            // Simulate progress steps (backend runs them sequentially)
-            const progressTimer = setTimeout(() => setAnalysisStep("ai_analysis"), 2000);
-            const progressTimer2 = setTimeout(() => setAnalysisStep("zk_proof"), 6000);
-            const progressTimer3 = setTimeout(() => setAnalysisStep("blockchain"), 12000);
-
             const result = await analyzePortfolio(
                 {
                     assets: validAssets,
@@ -83,13 +90,9 @@ export default function PortfolioPage() {
                 isConnected // wallet_mode = true when wallet is connected
             );
 
-            clearTimeout(progressTimer);
-            clearTimeout(progressTimer2);
-            clearTimeout(progressTimer3);
-
             // If wallet connected, submit from user's wallet
             if (isConnected && result.zk_proof && result.public_inputs) {
-                setAnalysisStep("blockchain");
+                setAnalysisStep("wallet");
                 try {
                     const txHash = await submitAttestation(result.zk_proof, result.public_inputs);
                     result.blockchain_tx = txHash;
@@ -112,6 +115,7 @@ export default function PortfolioPage() {
 
             setAnalysisStep("done");
             setAnalysisResult(result);
+            setResultTime(new Date().toLocaleString());
             toast.success("Portfolio analysis complete!");
         } catch (err) {
             setAnalysisStep("error");
@@ -134,7 +138,9 @@ export default function PortfolioPage() {
         setAnalysisResult(null);
         setSimulationResult(null);
         setAnalysisError("");
-        setAnalysisStep("ai_analysis");
+        setRunMode("simulate");
+        setRunId((id) => id + 1);
+        setAnalysisStep("server");
 
         try {
             const result = await simulatePortfolio(
@@ -148,6 +154,7 @@ export default function PortfolioPage() {
 
             setAnalysisStep("done");
             setSimulationResult(result);
+            setResultTime(new Date().toLocaleString());
             toast.success("Simulation complete! No on-chain changes made.");
         } catch (err) {
             setAnalysisStep("error");
@@ -157,6 +164,7 @@ export default function PortfolioPage() {
         }
     };
 
+    const isBusy = analysisStep === "server" || analysisStep === "wallet";
     const activeResult = analysisResult || simulationResult;
     const risk = activeResult?.ai_analysis?.risk;
     const phase2 = activeResult?.ai_analysis?.phase2;
@@ -172,7 +180,7 @@ export default function PortfolioPage() {
                     Portfolio Analysis
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">
-                    Add your assets, run AI analysis, and get blockchain-verified insights
+                    Add your assets to get a risk and diversification analysis
                 </p>
             </div>
 
@@ -259,7 +267,7 @@ export default function PortfolioPage() {
                             <div className="ml-auto flex gap-3">
                                 <button
                                     onClick={handleSimulate}
-                                    disabled={analysisStep !== "idle" && analysisStep !== "done" && analysisStep !== "error"}
+                                    disabled={isBusy}
                                     className="px-4 py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-sm font-semibold text-indigo-400 hover:bg-indigo-500/20 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                 >
                                     <Sparkles className="w-4 h-4 opacity-50" />
@@ -267,7 +275,7 @@ export default function PortfolioPage() {
                                 </button>
                                 <button
                                     onClick={handleAnalyze}
-                                    disabled={analysisStep !== "idle" && analysisStep !== "done" && analysisStep !== "error"}
+                                    disabled={isBusy}
                                     className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-sm font-semibold text-white hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                 >
                                     <Sparkles className="w-4 h-4" />
@@ -300,7 +308,12 @@ export default function PortfolioPage() {
 
             {/* Analysis Progress */}
             {analysisStep !== "idle" && !activeResult && (
-                <AnalysisProgress currentStep={analysisStep} error={analysisError} />
+                <AnalysisProgress
+                    key={runId}
+                    currentStep={analysisStep}
+                    error={analysisError}
+                    serverTasks={runMode === "simulate" ? SIMULATION_TASKS : undefined}
+                />
             )}
 
             {/* Analysis Results View */}
@@ -389,7 +402,7 @@ export default function PortfolioPage() {
                             {!isSimulated && analysisResult && (
                                 <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06]">
                                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">
-                                        Blockchain Proof
+                                        On-Chain Timestamp
                                     </p>
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-2">
@@ -402,8 +415,8 @@ export default function PortfolioPage() {
                                             />
                                             <span className="text-sm text-white font-medium">
                                                 {analysisResult?.blockchain_status === "confirmed"
-                                                    ? "Verified On-Chain"
-                                                    : "Pending"}
+                                                    ? "Snapshot hash anchored"
+                                                    : "Not anchored"}
                                             </span>
                                         </div>
                                         {analysisResult.blockchain_tx && (
@@ -461,7 +474,7 @@ export default function PortfolioPage() {
                                             created_at: new Date().toISOString(),
                                             blockchain_status: "failed",
                                             blockchain_tx: null,
-                                            snapshot_hash: "simulated_" + Date.now()
+                                            snapshot_hash: `simulated_${runId}`
                                         } : (analysisResult ? {
                                             user_email: "",
                                             action: "portfolio_analysis",
@@ -538,6 +551,8 @@ export default function PortfolioPage() {
                                 </div>
                             </Card>
                         )}
+
+                    <Disclaimer asOf={resultTime ?? undefined} />
 
                     {/* Warnings */}
                     {!isSimulated && analysisResult?.blockchain_warning && (

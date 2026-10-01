@@ -42,19 +42,11 @@ def run_ai_analysis(portfolio_data, risk_profile="balanced", lookback_days=90,
     # Generate LLM context for personalized explanations
     llm_context = behavioral_engine.generate_llm_context(risk_profile)
 
-    # Blend Phase 3 into results
+    # Attach Phase 3 as context only. The risk score is a property of the
+    # portfolio and must not move based on how the user has responded to
+    # past suggestions; behavior only informs recommendations/explanations.
     if personalization["confidence"] > 0:
-        original_score = result["risk"]["risk_score"]
-        # Apply the offset while keeping it within bounds 0-5 (our risk scale)
-        new_score = max(min(original_score + personalization["score_offset"], 5.0), 0.0)
-        
-        result["risk"]["risk_score"] = round(new_score, 2)
-        result["risk"]["personalization"] = personalization
-        
-        # Add behavioral context to the explanation
-        result["risk"]["explanation"] += (
-            f" (Personalized: {personalization['drift_direction']})"
-        )
+        result["personalization"] = personalization
 
     # Attach LLM context to the result so app.py can pass it to generate_llm_explanation
     result["_behavioral_llm_context"] = llm_context

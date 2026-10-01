@@ -70,7 +70,7 @@ export default function KYCPage() {
                     const txHash = await submitKYC(data.zk_proof, data.public_inputs);
                     data.blockchain_tx = txHash;
                     data.blockchain_status = "confirmed";
-                    data.status = "KYC verified on-chain (your wallet)";
+                    data.status = "Attestation recorded on-chain (your wallet)";
                     delete data.blockchain_warning;
                     await confirmTx({
                         tx_hash: txHash,
@@ -99,7 +99,7 @@ export default function KYCPage() {
                     KYC Verification
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">
-                    Verify your identity with zero-knowledge proofs — your data stays private
+                    Create an on-chain identity attestation (testnet demo)
                 </p>
             </div>
 
@@ -108,11 +108,12 @@ export default function KYCPage() {
                 <ShieldCheck className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
                 <div>
                     <p className="text-sm text-blue-300 font-medium">
-                        Privacy-First KYC
+                        How your data is handled
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
-                        Your personal data is hashed locally and only a cryptographic commitment is stored on-chain.
-                        No raw personal data leaves your device.
+                        Your details are sent to the RiskLens server over HTTPS to build the proof, then discarded.
+                        Only a hash of them is stored and anchored on-chain. Details are self-reported and no
+                        document check is performed, so this is not a regulated KYC.
                     </p>
                 </div>
             </div>
