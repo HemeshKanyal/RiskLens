@@ -64,9 +64,12 @@ async function ensureLocalFunds(address: string, minWei: bigint = parseEther("1"
         return body.result;
     };
     const balance = BigInt((await rpc("eth_getBalance", [address, "latest"])) ?? "0x0");
-    if (balance >= minWei) return false;
-    await rpc("anvil_setBalance", [address, toQuantity(parseEther("100"))]);
-    return true;
+    const toppedUp = balance < minWei;
+    if (toppedUp) await rpc("anvil_setBalance", [address, toQuantity(parseEther("100"))]);
+    // anvil_setBalance doesn't create a block, and wallets cache balances per
+    // block, so mine one to make the wallet re-read it.
+    await rpc("evm_mine", []);
+    return toppedUp;
 }
 
 function splitPublicInputs(hex: string): string[] {
@@ -230,7 +233,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     throw new Error(`Couldn't top up your wallet on the local chain: ${err instanceof Error ? err.message : err}`);
                 }
             }
-            const balance = await provider.getBalance(from);
+            let balance = await provider.getBalance(from);
+            // The wallet picks up the new block on its next poll; give it a few seconds
+            for (let i = 0; balance < cost && CHAIN.id === LOCAL_CHAIN_ID && i < 8; i++) {
+                await new Promise((r) => setTimeout(r, 750));
+                balance = await provider.getBalance(from);
+            }
             if (balance < cost) {
                 throw new Error(
                     `Not enough ETH on ${CHAIN.name} to pay the network fee ` +
