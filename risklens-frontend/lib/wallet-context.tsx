@@ -12,7 +12,7 @@ import React, {
     useCallback,
     useEffect,
 } from "react";
-import { BrowserProvider, Contract, parseEther, toQuantity } from "ethers";
+import { BrowserProvider, Contract, formatEther, parseEther, toQuantity } from "ethers";
 import toast from "react-hot-toast";
 import { CHAIN } from "./chain";
 
@@ -46,25 +46,27 @@ const TARGET_CHAIN_ID = CHAIN.id;
 const LOCAL_CHAIN_ID = 31337;
 
 /**
- * Local Anvil chain only: give the connected wallet test ETH so it can pay
- * fees. Uses Anvil's dev-only anvil_setBalance; does nothing on real networks.
+ * Local Anvil chain only: make sure `address` holds at least `minWei`, topping
+ * it up to 100 test ETH with Anvil's dev-only anvil_setBalance. Returns true
+ * if it topped up. Never runs on real networks. Throws with the real reason
+ * if the local chain can't be reached.
  */
-async function fundOnLocalChain(address: string) {
-    if (CHAIN.id !== LOCAL_CHAIN_ID || !CHAIN.rpcUrl) return;
-    const rpc = (method: string, params: unknown[]) =>
-        fetch(CHAIN.rpcUrl, {
+async function ensureLocalFunds(address: string, minWei: bigint = parseEther("1")): Promise<boolean> {
+    if (CHAIN.id !== LOCAL_CHAIN_ID || !CHAIN.rpcUrl) return false;
+    const rpc = async (method: string, params: unknown[]) => {
+        const res = await fetch(CHAIN.rpcUrl, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }).then((r) => r.json());
-    try {
-        const { result } = await rpc("eth_getBalance", [address, "latest"]);
-        if (BigInt(result ?? "0x0") >= parseEther("1")) return;
-        await rpc("anvil_setBalance", [address, toQuantity(parseEther("100"))]);
-        toast.success("Added 100 test ETH to your wallet (local chain only)");
-    } catch {
-        // Chain not reachable; the fee check will explain if a transaction can't be paid
-    }
+        });
+        const body = await res.json();
+        if (body.error) throw new Error(`${method}: ${body.error.message}`);
+        return body.result;
+    };
+    const balance = BigInt((await rpc("eth_getBalance", [address, "latest"])) ?? "0x0");
+    if (balance >= minWei) return false;
+    await rpc("anvil_setBalance", [address, toQuantity(parseEther("100"))]);
+    return true;
 }
 
 function splitPublicInputs(hex: string): string[] {
@@ -127,8 +129,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    // Top up on connect so the wallet shows a balance; sending also checks.
     useEffect(() => {
-        if (address && chainId === LOCAL_CHAIN_ID) fundOnLocalChain(address);
+        if (!address || chainId !== LOCAL_CHAIN_ID) return;
+        ensureLocalFunds(address)
+            .then((funded) => funded && toast.success("Added 100 test ETH to your wallet (local chain only)"))
+            .catch((err) => console.warn("[RiskLens] Local top-up failed:", err));
     }, [address, chainId]);
 
     const connect = useCallback(async () => {
@@ -212,16 +218,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const contract = new Contract(contractAddress, abi, signer);
             const args = [proof.startsWith("0x") ? proof : "0x" + proof, splitPublicInputs(publicInputs)];
 
-            const [gas, fees, balance] = await Promise.all([
-                contract[fn].estimateGas(...args),
-                provider.getFeeData(),
-                provider.getBalance(await signer.getAddress()),
-            ]);
+            const from = await signer.getAddress();
+            const [gas, fees] = await Promise.all([contract[fn].estimateGas(...args), provider.getFeeData()]);
             const pricePerGas = fees.maxFeePerGas ?? fees.gasPrice ?? BigInt(0);
-            if (balance < gas * pricePerGas) {
+            const cost = gas * pricePerGas;
+
+            if ((await provider.getBalance(from)) < cost && CHAIN.id === LOCAL_CHAIN_ID) {
+                try {
+                    if (await ensureLocalFunds(from, cost)) toast.success("Added 100 test ETH to your wallet (local chain only)");
+                } catch (err) {
+                    throw new Error(`Couldn't top up your wallet on the local chain: ${err instanceof Error ? err.message : err}`);
+                }
+            }
+            const balance = await provider.getBalance(from);
+            if (balance < cost) {
                 throw new Error(
-                    `Not enough ETH on ${CHAIN.name} to pay the network fee` +
-                        (CHAIN.id === LOCAL_CHAIN_ID ? ". Reconnect your wallet to get local test ETH." : ".")
+                    `Not enough ETH on ${CHAIN.name} to pay the network fee ` +
+                        `(need ${formatEther(cost)}, have ${formatEther(balance)}).`
                 );
             }
 
