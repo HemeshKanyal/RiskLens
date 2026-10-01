@@ -10,7 +10,7 @@ import type {
   User,
   PortfolioRequest,
   AnalysisResponse,
-  KYCRequest,
+  KYCProofRequest,
   KYCResponse,
   PortfolioSnapshot,
   DecisionLog,
@@ -25,7 +25,7 @@ const API_BASE_URL =
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 400_000, // 6+ minutes — LLM + ZK proof + blockchain can be slow
+  timeout: 300_000, // the first analysis loads the language model, which can be slow
   headers: { "Content-Type": "application/json" },
 });
 
@@ -114,42 +114,17 @@ export async function fetchCurrentUser(): Promise<User> {
 // PORTFOLIO ANALYSIS
 // ==============================
 
-export async function analyzePortfolio(
-  request: PortfolioRequest,
-  walletMode = false
-): Promise<AnalysisResponse> {
-  const { data } = await api.post<AnalysisResponse>(
-    `/analyze${walletMode ? "?wallet_mode=true" : ""}`,
-    request
-  );
+export async function analyzePortfolio(request: PortfolioRequest): Promise<AnalysisResponse> {
+  const { data } = await api.post<AnalysisResponse>("/analyze", request);
   return data;
 }
 
 // ==============================
-// KYC VERIFICATION
+// IDENTITY ATTESTATION
 // ==============================
 
-export async function verifyKYC(
-  request: KYCRequest,
-  walletMode = false
-): Promise<KYCResponse> {
-  const { data } = await api.post<KYCResponse>(
-    `/verify-kyc${walletMode ? "?wallet_mode=true" : ""}`,
-    request
-  );
-  return data;
-}
-
-// ==============================
-// CONFIRM USER TRANSACTION
-// ==============================
-
-export async function confirmTx(payload: {
-  tx_hash: string;
-  action: string;
-  snapshot_hash?: string;
-}): Promise<{ status: string; tx_hash: string }> {
-  const { data } = await api.post("/confirm-tx", payload);
+export async function verifyKYC(request: KYCProofRequest): Promise<KYCResponse> {
+  const { data } = await api.post<KYCResponse>("/verify-kyc", request);
   return data;
 }
 

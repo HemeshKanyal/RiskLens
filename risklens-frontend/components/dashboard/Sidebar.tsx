@@ -15,7 +15,6 @@ import {
     X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import WalletButton from "@/components/dashboard/WalletButton";
 import Logo from "@/components/ui/Logo";
 import { cn } from "@/lib/cn";
 
@@ -28,7 +27,7 @@ const NAV = [
 ];
 
 const ACCOUNT_NAV = [
-    { label: "Identity attestation", href: "/dashboard/kyc", icon: BadgeCheck },
+    { label: "Identity check", href: "/dashboard/kyc", icon: BadgeCheck },
     { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -121,10 +120,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                         ))}
                     </div>
                 </nav>
-
-                <div className="px-3 pb-3">
-                    <WalletButton />
-                </div>
 
                 <div className="px-3 py-3 border-t border-line flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-full bg-surface-2 text-fg-2 flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">

@@ -20,12 +20,9 @@ class AnalysisResponse(BaseModel):
     llm_explanation: str
 
 
-class KYCRequest(BaseModel):
-    full_name: str
-    date_of_birth: str        # "YYYY-MM-DD"
-    country_code: int          # numeric code (avoid 1,2,3 which are blacklisted)
-    document_id: str           # passport / national ID number
-    age: int
+class KYCProofRequest(BaseModel):
+    proof: str                 # base64 UltraHonk proof, generated in the browser
+    public_inputs: List[str]   # [today YYYYMMDD, identity commitment], 0x-hex fields
 
 
 # --- Auth Models ---
@@ -47,7 +44,7 @@ class UserResponse(BaseModel):
     full_name: str
     is_active: bool = True
     kyc_verified: bool = False
-    kyc_tx: Optional[str] = None
+    kyc_verified_at: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str

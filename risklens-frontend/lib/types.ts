@@ -10,7 +10,7 @@ export interface User {
   full_name: string;
   is_active: boolean;
   kyc_verified?: boolean;
-  kyc_tx?: string;
+  kyc_verified_at?: string;
 }
 
 export interface Token {
@@ -49,8 +49,6 @@ export interface PortfolioSnapshot {
   assets: Asset[];
   risk_profile: string;
   snapshot_hash: string;
-  blockchain_tx: string | null;
-  blockchain_status: "confirmed" | "failed";
   created_at: string;
 }
 
@@ -127,33 +125,21 @@ export interface AnalysisResponse {
   ai_analysis: RawAnalysis;
   llm_explanation: string;
   snapshot_hash: string;
-  claim_hash: string;
-  zk_proof: string;
-  public_inputs: string;
-  blockchain_tx: string | null;
-  blockchain_status: "confirmed" | "failed";
+  created_at: string;
   live_prices_used?: Record<string, number>;
-  blockchain_warning?: string;
 }
 
-// --- KYC ---
+// --- Identity attestation (zero-knowledge) ---
 
-export interface KYCRequest {
-  full_name: string;
-  date_of_birth: string; // YYYY-MM-DD
-  country_code: number;
-  document_id: string;
-  age: number;
+export interface KYCProofRequest {
+  proof: string; // base64, generated in the browser
+  public_inputs: string[]; // [today YYYYMMDD, identity commitment] as 0x-hex fields
 }
 
 export interface KYCResponse {
-  status: string;
+  status: "verified";
   identity_commitment_hash: string;
-  zk_proof: string;
-  public_inputs: string;
-  blockchain_tx: string | null;
-  blockchain_status: "confirmed" | "failed";
-  blockchain_warning?: string;
+  verified_at: string;
 }
 
 // --- Decision Logs ---
@@ -162,12 +148,9 @@ export interface DecisionLog {
   user_email: string;
   action: "portfolio_analysis" | "kyc_verification";
   snapshot_hash?: string;
-  claim_hash?: string;
   ai_analysis?: RawAnalysis;
   llm_explanation?: string;
   identity_commitment_hash?: string;
-  blockchain_tx: string | null;
-  blockchain_status: "confirmed" | "failed";
   created_at: string;
 }
 

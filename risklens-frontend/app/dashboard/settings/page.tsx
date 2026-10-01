@@ -4,7 +4,6 @@ import React from "react";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
-import { CHAIN } from "@/lib/chain";
 import { useAuth } from "@/lib/auth-context";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -33,9 +32,9 @@ export default function SettingsPage() {
                             {user?.is_active ? "Active" : "Inactive"}
                         </Badge>
                     </Row>
-                    <Row label="Identity attestation">
+                    <Row label="Identity check">
                         <Badge tone={user?.kyc_verified ? "positive" : "neutral"} dot>
-                            {user?.kyc_verified ? "Recorded" : "None"}
+                            {user?.kyc_verified ? "Verified" : "Not done"}
                         </Badge>
                     </Row>
                 </dl>
@@ -46,8 +45,7 @@ export default function SettingsPage() {
                 <dl>
                     <Row label="Market data">Daily closing prices (Yahoo Finance)</Row>
                     <Row label="Explanations">Local language model (Ollama)</Row>
-                    <Row label="On-chain records">{CHAIN.name}</Row>
-                    <Row label="Proof system">Noir / Barretenberg</Row>
+                    <Row label="Identity proofs">Noir, generated in your browser</Row>
                 </dl>
             </Card>
         </div>

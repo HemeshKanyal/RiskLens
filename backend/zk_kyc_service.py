@@ -1,78 +1,77 @@
-import subprocess
+"""
+Server-side verification of identity proofs.
+
+The proof is generated in the user's browser from their details (see
+zk/risklens_kyc_circuit). The server never receives those details, only the
+proof and its two public values:
+
+    public_inputs[0]  today       YYYYMMDD date the proof was made for
+    public_inputs[1]  commitment  salted hash of the details
+
+A valid proof shows the person is 18+ on `today`, isn't from a restricted
+country code, and that `commitment` is a hash of their details.
+"""
 import os
-import hashlib
-import logging
+import shutil
+import subprocess
+import tempfile
+from datetime import datetime, timedelta, timezone
 
-from zk_workspace import circuit_workspace
-
-logger = logging.getLogger("risklens.zk_kyc")
-
-# Exact BN254 scalar field modulus used by Noir/Barretenberg
+ZK_TARGET = "noir-recursive"  # must match the browser prover's verifierTarget
+VK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "zk", "risklens_kyc_circuit", "vk", "vk")
 FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+MAX_PROOF_BYTES = 64 * 1024
 
 
-def generate_kyc_proof(full_name: str, date_of_birth: str, country_code: int, document_id: str, age: int):
-    """
-    Generate a ZK proof for KYC verification.
-    
-    - Computes identity_commitment from user's private data (name + dob + doc_id)
-    - Writes dynamic Prover.toml
-    - Runs nargo execute + bb prove
-    - Returns (proof_hex, public_inputs_hex, identity_commitment_hex)
-    """
-    # Compute identity commitment from user's private KYC data
-    identity_string = f"{full_name}|{date_of_birth}|{document_id}"
-    identity_hash = hashlib.sha256(identity_string.encode()).hexdigest()
-    identity_commitment = int(identity_hash, 16) % FIELD_MODULUS
-
-    # Both public inputs are the same commitment hash
-    claim_hash = identity_commitment
-    identity_commitment_hash = identity_commitment
-
-    logger.info("KYC identity commitment computed")
-    logger.debug("Identity commitment (int): %s", identity_commitment)
-
-    with circuit_workspace("risklens_kyc_circuit") as zk_dir:
-        # Write dynamic Prover.toml
-        prover_path = os.path.join(zk_dir, "Prover.toml")
-
-        with open(prover_path, "w") as f:
-            f.write(f'age = "{age}"\n')
-            f.write(f'country_code = "{country_code}"\n')
-            f.write(f'kyc_status = "1"\n')
-            f.write(f'identity_commitment = "{identity_commitment}"\n')
-            f.write(f'\n')
-            f.write(f'claim_hash = "{claim_hash}"\n')
-            f.write(f'identity_commitment_hash = "{identity_commitment_hash}"\n')
-
-        logger.debug("KYC Prover.toml written at %s", prover_path)
+class InvalidProof(Exception):
+    pass
 
 
-        # Step 1 — execute circuit (solves witness)
-        logger.info("Running nargo execute for KYC circuit...")
-        subprocess.run(["nargo", "execute"], cwd=zk_dir, check=True)
+def _bb_binary() -> str:
+    path = os.getenv("BB_PATH") or shutil.which("bb") or os.path.expanduser("~/.bb/bb")
+    if not os.path.exists(path):
+        raise RuntimeError("Barretenberg (bb) not found; install it with bbup or set BB_PATH.")
+    return path
 
-        # Step 2 — generate proof
-        logger.info("Generating KYC ZK proof...")
-        subprocess.run([
-            "bb", "prove",
-            "-b", "target/risklens_kyc_circuit.json",
-            "-w", "target/risklens_kyc_circuit.gz",
-            "-k", "vk/vk",
-            "-o", "proof",
-            "-t", "evm"
-        ], cwd=zk_dir, check=True)
 
-        # Step 3 — read proof
-        proof_path = os.path.join(zk_dir, "proof", "proof")
-        with open(proof_path, "rb") as f:
-            proof = f.read().hex()
+def _field(hex_value: str) -> int:
+    value = int(hex_value, 16)
+    if not 0 <= value < FIELD_MODULUS:
+        raise InvalidProof("Public input is out of range.")
+    return value
 
-        # Step 4 — read public inputs
-        public_inputs_path = os.path.join(zk_dir, "proof", "public_inputs")
-        with open(public_inputs_path, "rb") as f:
-            public_inputs = f.read().hex()
 
-        logger.info("KYC ZK proof generated successfully (public inputs length: %d)", len(public_inputs))
+def _accepted_dates() -> set[int]:
+    # Allow yesterday/tomorrow so users in any time zone can prove "today"
+    now = datetime.now(timezone.utc)
+    return {int((now + timedelta(days=d)).strftime("%Y%m%d")) for d in (-1, 0, 1)}
 
-        return proof, public_inputs, identity_hash
+
+def verify_kyc_proof(proof: bytes, public_inputs: list[str]) -> dict:
+    """Verify an identity proof. Returns {"date": int, "commitment": "0x..."}; raises InvalidProof."""
+    if not proof or len(proof) > MAX_PROOF_BYTES:
+        raise InvalidProof("Proof is missing or too large.")
+    if len(public_inputs) != 2:
+        raise InvalidProof("Expected two public inputs.")
+
+    today, commitment = (_field(v) for v in public_inputs)
+    if today not in _accepted_dates():
+        raise InvalidProof("Proof isn't for today's date. Generate a new one.")
+
+    with tempfile.TemporaryDirectory(prefix="kyc_verify_") as tmp:
+        proof_path = os.path.join(tmp, "proof")
+        inputs_path = os.path.join(tmp, "public_inputs")
+        with open(proof_path, "wb") as f:
+            f.write(proof)
+        with open(inputs_path, "wb") as f:
+            f.write(b"".join(_field(v).to_bytes(32, "big") for v in public_inputs))
+
+        result = subprocess.run(
+            [_bb_binary(), "verify", "-k", VK_PATH, "-p", proof_path, "-i", inputs_path, "-t", ZK_TARGET],
+            capture_output=True,
+            timeout=60,
+        )
+    if result.returncode != 0:
+        raise InvalidProof("Proof did not verify.")
+
+    return {"date": today, "commitment": "0x" + commitment.to_bytes(32, "big").hex()}

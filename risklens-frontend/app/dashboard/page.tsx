@@ -39,7 +39,6 @@ export default function DashboardPage() {
     const analyses = decisions.filter((d) => d.action === "portfolio_analysis");
     const latest = analyses.find((d) => d.ai_analysis);
     const view = latest?.ai_analysis ? buildAnalysisView(latest.ai_analysis) : null;
-    const anchored = analyses.filter((d) => d.blockchain_status === "confirmed").length;
 
     const classWeights: Record<string, number> = {};
     if (latestPortfolio) {
@@ -124,7 +123,7 @@ export default function DashboardPage() {
                             label="Analyses"
                             isLoading={isLoading}
                             value={analyses.length}
-                            hint={`${anchored} anchored on-chain`}
+                            hint={latest ? `Last one ${formatRelativeTime(latest.created_at)}` : undefined}
                         />
                     </div>
 

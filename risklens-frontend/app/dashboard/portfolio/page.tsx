@@ -15,8 +15,7 @@ import AnalysisProgress from "@/components/portfolio/AnalysisProgress";
 import type { AnalysisStep } from "@/components/portfolio/AnalysisProgress";
 import AnalysisResults from "@/components/analysis/AnalysisResults";
 import type { Asset, AnalysisResponse, SimulationResponse } from "@/lib/types";
-import { analyzePortfolio, confirmTx, extractError, simulatePortfolio } from "@/lib/api";
-import { useWallet } from "@/lib/wallet-context";
+import { analyzePortfolio, extractError, simulatePortfolio } from "@/lib/api";
 
 type InputMethod = "manual" | "screenshot" | "broker";
 type RiskProfile = "conservative" | "balanced" | "aggressive";
@@ -24,7 +23,7 @@ type RiskProfile = "conservative" | "balanced" | "aggressive";
 const SIMULATION_TASKS = [
     "Resolve live prices for assets without a value",
     "Compute allocation, volatility and correlation metrics",
-    "Generate a plain-language explanation (nothing is saved or recorded on-chain)",
+    "Generate a plain-language explanation (nothing is saved)",
 ];
 
 const LOOKBACK_OPTIONS = [30, 60, 90, 180];
@@ -44,8 +43,7 @@ export default function PortfolioPage() {
     const [runMode, setRunMode] = useState<"analyze" | "simulate">("analyze");
     const [runId, setRunId] = useState(0);
 
-    const { isConnected, submitAttestation } = useWallet();
-    const isBusy = step === "server" || step === "wallet";
+    const isBusy = step === "server";
 
     const handleScreenshotExtracted = (extracted: Asset[]) => {
         setAssets(extracted);
@@ -79,27 +77,11 @@ export default function PortfolioPage() {
         const lookback = lookbackDays;
 
         try {
-            const data = await analyzePortfolio(
-                { assets: validAssets, risk_profile: riskProfile, lookback_days: lookback },
-                isConnected // wallet mode: the user signs the attestation themselves
-            );
-
-            if (isConnected && data.zk_proof && data.public_inputs) {
-                setStep("wallet");
-                try {
-                    const txHash = await submitAttestation(data.zk_proof, data.public_inputs);
-                    data.blockchain_tx = txHash;
-                    data.blockchain_status = "confirmed";
-                    delete data.blockchain_warning;
-                    await confirmTx({ tx_hash: txHash, action: "portfolio_analysis", snapshot_hash: data.snapshot_hash });
-                } catch (walletErr) {
-                    // The analysis itself succeeded and is saved; only the anchoring didn't happen.
-                    data.blockchain_status = "failed";
-                    data.blockchain_warning =
-                        walletErr instanceof Error ? walletErr.message : "Wallet transaction was not completed";
-                }
-            }
-
+            const data = await analyzePortfolio({
+                assets: validAssets,
+                risk_profile: riskProfile,
+                lookback_days: lookback,
+            });
             setStep("done");
             setResult({ kind: "analysis", data, lookbackDays: lookback, asOf: new Date().toLocaleString() });
         } catch (err) {
@@ -200,7 +182,7 @@ export default function PortfolioPage() {
                                 </Button>
                             </div>
                             <p className="text-xs text-muted">
-                                Analyze saves the result{isConnected ? " and asks your wallet to sign" : ""}. Simulate saves nothing.
+                                Analyze saves the result to your history. Simulate saves nothing.
                             </p>
                         </div>
                     </div>
@@ -223,12 +205,7 @@ export default function PortfolioPage() {
                     livePrices={result.data.live_prices_used}
                     lookbackDays={result.lookbackDays}
                     asOf={result.asOf}
-                    record={{
-                        status: result.data.blockchain_status,
-                        txHash: result.data.blockchain_tx,
-                        snapshotHash: result.data.snapshot_hash,
-                        warning: result.data.blockchain_warning,
-                    }}
+                    snapshotHash={result.data.snapshot_hash}
                 />
             )}
             {result?.kind === "simulation" && (

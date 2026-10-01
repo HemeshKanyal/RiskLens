@@ -9,8 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@aztec/bb.js": "5.0.0-nightly.20260522",
+    "@noir-lang/noir_js": "1.0.0-beta.22",
     "axios": "^1.15.0",
-    "ethers": "^6.16.0",
     "lucide-react": "^1.8.0",
     "next": "16.1.6",
     "react": "19.2.3",

@@ -1,47 +1,51 @@
 "use client";
 
 import React, { useState } from "react";
-import { Info, Loader2 } from "lucide-react";
-import { CHAIN } from "@/lib/chain";
-import TxLink from "@/components/ui/TxLink";
+import { CheckCircle2, Loader2, Lock } from "lucide-react";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import PageHeader from "@/components/ui/PageHeader";
 import { Field, Input } from "@/components/ui/Field";
-import { verifyKYC, confirmTx, extractError } from "@/lib/api";
-import { useWallet } from "@/lib/wallet-context";
+import { verifyKYC, extractError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { createIdentityProof, IdentityProofError } from "@/lib/zk-identity";
 import type { KYCResponse } from "@/lib/types";
-import { truncateHash } from "@/lib/utils";
+import { formatDate, truncateHash } from "@/lib/utils";
 
-// Demo circuit rule (zk/risklens_kyc_circuit): codes 1–3 are treated as restricted
+// Demo rule enforced by the circuit (zk/risklens_kyc_circuit)
 const RESTRICTED_CODES = [1, 2, 3];
 
 type Errors = Partial<Record<"name" | "dob" | "country" | "doc" | "form", string>>;
+type Phase = "idle" | "loading" | "proving" | "verifying";
+
+const PHASE_LABEL: Record<Exclude<Phase, "idle">, string> = {
+    loading: "Loading prover…",
+    proving: "Creating proof on this device…",
+    verifying: "Verifying proof…",
+};
 
 function ageFrom(dob: string): number | null {
     const d = new Date(dob);
     if (Number.isNaN(d.getTime())) return null;
     const now = new Date();
     let age = now.getFullYear() - d.getFullYear();
-    const beforeBirthday = now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate());
-    if (beforeBirthday) age -= 1;
+    if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) age -= 1;
     return age;
 }
 
 export default function KYCPage() {
-    const { user } = useAuth();
-    const { isConnected, submitKYC } = useWallet();
+    const { user, refreshUser } = useAuth();
     const [fullName, setFullName] = useState(user?.full_name || "");
     const [dob, setDob] = useState("");
     const [countryCode, setCountryCode] = useState("");
     const [documentId, setDocumentId] = useState("");
     const [errors, setErrors] = useState<Errors>({});
-    const [phase, setPhase] = useState<"idle" | "proving" | "wallet">("idle");
-    const isLoading = phase !== "idle";
+    const [phase, setPhase] = useState<Phase>("idle");
     const [result, setResult] = useState<KYCResponse | null>(null);
+    const isBusy = phase !== "idle";
 
+    // Same checks as the circuit, so most mistakes are caught before proving
     const validate = (): Errors => {
         const e: Errors = {};
         if (fullName.trim().length < 2) e.name = "Enter your full name.";
@@ -62,36 +66,19 @@ export default function KYCPage() {
         setErrors(found);
         if (Object.keys(found).length > 0) return;
 
-        setPhase("proving");
         setResult(null);
         try {
-            const data = await verifyKYC(
-                {
-                    full_name: fullName.trim(),
-                    date_of_birth: dob,
-                    country_code: Number(countryCode),
-                    document_id: documentId.trim(),
-                    age: ageFrom(dob)!,
-                },
-                isConnected
+            const proof = await createIdentityProof(
+                { fullName, dateOfBirth: dob, countryCode: Number(countryCode), documentId },
+                setPhase
             );
-
-            if (isConnected && data.zk_proof && data.public_inputs) {
-                setPhase("wallet");
-                try {
-                    const txHash = await submitKYC(data.zk_proof, data.public_inputs);
-                    data.blockchain_tx = txHash;
-                    data.blockchain_status = "confirmed";
-                    delete data.blockchain_warning;
-                    await confirmTx({ tx_hash: txHash, action: "kyc_verification" });
-                } catch (walletErr) {
-                    data.blockchain_warning = walletErr instanceof Error ? walletErr.message : "Wallet transaction failed";
-                    data.blockchain_status = "failed";
-                }
-            }
-            setResult(data);
+            setPhase("verifying");
+            setResult(await verifyKYC(proof.request));
+            await refreshUser();
         } catch (err) {
-            setErrors({ form: extractError(err) });
+            setErrors({
+                form: err instanceof IdentityProofError ? err.message : extractError(err),
+            });
         } finally {
             setPhase("idle");
         }
@@ -100,24 +87,30 @@ export default function KYCPage() {
     return (
         <div className="max-w-2xl mx-auto space-y-6">
             <PageHeader
-                title="Identity attestation"
-                description={`Record a hash of your identity details on ${CHAIN.name}. This is a demo, not a regulated KYC check.`}
+                title="Identity check"
+                description="Prove you're 18+ and not from a restricted country, without sharing your details."
             />
 
             <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-accent-soft">
-                <Info className="w-4 h-4 text-accent-text mt-0.5 shrink-0" aria-hidden="true" />
+                <Lock className="w-4 h-4 text-accent-text mt-0.5 shrink-0" aria-hidden="true" />
                 <div className="text-sm text-fg-2 space-y-1">
                     <p>
-                        Your details are sent to the RiskLens server over HTTPS to build the proof, then discarded. Only a
-                        hash of them is stored and anchored on-chain.
+                        Your details stay on this device. Your browser creates a zero-knowledge proof from them, and
+                        RiskLens only receives the proof and a salted fingerprint of your details, which it can&apos;t
+                        reverse.
                     </p>
-                    <p className="text-xs text-muted">Details are self-reported. No document is checked.</p>
+                    <p className="text-xs text-muted">
+                        This is a demo: details are self-reported and no document is checked, so it isn&apos;t a
+                        regulated KYC.
+                    </p>
                 </div>
             </div>
 
             {user?.kyc_verified && !result && (
-                <p className="text-sm text-fg-2">
-                    <Badge tone="positive" dot>Attested</Badge> You already have an attestation. Submitting again creates a new one.
+                <p className="text-sm text-fg-2 flex flex-wrap items-center gap-2">
+                    <Badge tone="positive" dot>Verified</Badge>
+                    {user.kyc_verified_at ? `on ${formatDate(user.kyc_verified_at)}. ` : ""}
+                    Submitting again replaces it.
                 </p>
             )}
 
@@ -125,10 +118,10 @@ export default function KYCPage() {
                 <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Full legal name" error={errors.name}>
-                            <Input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={isLoading} />
+                            <Input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={isBusy} />
                         </Field>
                         <Field label="Date of birth" error={errors.dob}>
-                            <Input type="date" autoComplete="bday" value={dob} onChange={(e) => setDob(e.target.value)} disabled={isLoading} />
+                            <Input type="date" autoComplete="bday" value={dob} onChange={(e) => setDob(e.target.value)} disabled={isBusy} />
                         </Field>
                         <Field label="Country code" hint="Numeric, 1–255. Codes 1–3 are a demo restricted list." error={errors.country}>
                             <Input
@@ -138,11 +131,11 @@ export default function KYCPage() {
                                 max={255}
                                 value={countryCode}
                                 onChange={(e) => setCountryCode(e.target.value)}
-                                disabled={isLoading}
+                                disabled={isBusy}
                             />
                         </Field>
                         <Field label="Document number" hint="Passport or national ID" error={errors.doc}>
-                            <Input value={documentId} onChange={(e) => setDocumentId(e.target.value)} disabled={isLoading} autoComplete="off" />
+                            <Input value={documentId} onChange={(e) => setDocumentId(e.target.value)} disabled={isBusy} autoComplete="off" />
                         </Field>
                     </div>
 
@@ -151,12 +144,12 @@ export default function KYCPage() {
                     )}
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
-                        <p className="text-xs text-muted">
-                            {isConnected ? "Your wallet will be asked to sign the transaction." : "The RiskLens server submits the transaction."}
+                        <p className="text-xs text-muted" aria-live="polite">
+                            {isBusy ? PHASE_LABEL[phase as Exclude<Phase, "idle">] : "Takes a few seconds the first time while the prover loads."}
                         </p>
-                        <Button type="submit" disabled={isLoading}>
-                            {isLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-                            {phase === "proving" ? "Generating proof…" : phase === "wallet" ? "Confirm in your wallet…" : "Create attestation"}
+                        <Button type="submit" disabled={isBusy}>
+                            {isBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                            {isBusy ? "Working…" : "Create proof"}
                         </Button>
                     </div>
                 </form>
@@ -166,31 +159,25 @@ export default function KYCPage() {
                 <Card aria-live="polite">
                     <CardHeader
                         title={
-                            result.blockchain_status === "confirmed"
-                                ? `Attestation recorded on ${CHAIN.name}`
-                                : "Proof created, but not recorded on-chain"
+                            <span className="inline-flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-positive-text" aria-hidden="true" />
+                                Identity proof verified
+                            </span>
                         }
-                        action={
-                            <Badge tone={result.blockchain_status === "confirmed" ? "positive" : "warning"} dot>
-                                {result.blockchain_status === "confirmed" ? "Confirmed" : "Not on-chain"}
-                            </Badge>
-                        }
+                        description="The server checked your proof. Your details were never sent."
                     />
                     <dl className="space-y-2 text-xs">
                         <div className="flex justify-between gap-4">
-                            <dt className="text-muted">Identity hash</dt>
-                            <dd className="font-mono text-fg-2">{truncateHash(result.identity_commitment_hash, 10)}</dd>
+                            <dt className="text-muted">Fingerprint (salted commitment)</dt>
+                            <dd className="font-mono text-fg-2" title={result.identity_commitment_hash}>
+                                {truncateHash(result.identity_commitment_hash, 10)}
+                            </dd>
                         </div>
-                        {result.blockchain_tx && (
-                            <div className="flex justify-between gap-4">
-                                <dt className="text-muted">Transaction</dt>
-                                <dd>
-                                    <TxLink hash={result.blockchain_tx} chars={8} />
-                                </dd>
-                            </div>
-                        )}
+                        <div className="flex justify-between gap-4">
+                            <dt className="text-muted">Verified</dt>
+                            <dd className="text-fg-2">{formatDate(result.verified_at)}</dd>
+                        </div>
                     </dl>
-                    {result.blockchain_warning && <p className="mt-3 text-xs text-warning-text">{result.blockchain_warning}</p>}
                 </Card>
             )}
         </div>

@@ -8,7 +8,6 @@ motor
 python-dotenv
 requests
 google-genai
-web3
 google-auth
 python-multipart
 yfinance

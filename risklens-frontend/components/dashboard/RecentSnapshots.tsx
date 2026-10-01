@@ -1,7 +1,5 @@
 import Link from "next/link";
-import TxLink from "@/components/ui/TxLink";
 import Card, { CardHeader } from "@/components/ui/Card";
-import Badge from "@/components/ui/Badge";
 import Skeleton from "@/components/ui/Skeleton";
 import type { PortfolioSnapshot } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -44,8 +42,7 @@ export default function RecentSnapshots({
                                 <th scope="col" className="py-2 pl-5 sm:pl-6 pr-3 font-medium">Date</th>
                                 <th scope="col" className="py-2 pr-3 font-medium hidden sm:table-cell">Profile</th>
                                 <th scope="col" className="py-2 pr-3 font-medium text-right">Holdings</th>
-                                <th scope="col" className="py-2 pr-3 font-medium text-right">Value</th>
-                                <th scope="col" className="py-2 pr-5 sm:pr-6 font-medium text-right">On-chain</th>
+                                <th scope="col" className="py-2 pr-5 sm:pr-6 font-medium text-right">Value</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -54,14 +51,7 @@ export default function RecentSnapshots({
                                     <td className="py-3 pl-5 sm:pl-6 pr-3 text-fg whitespace-nowrap">{formatDate(p.created_at)}</td>
                                     <td className="py-3 pr-3 text-fg-2 capitalize hidden sm:table-cell">{p.risk_profile}</td>
                                     <td className="py-3 pr-3 text-right tabular-nums text-fg-2">{p.assets.length}</td>
-                                    <td className="py-3 pr-3 text-right tabular-nums text-fg whitespace-nowrap">{formatCurrency(snapshotValue(p))}</td>
-                                    <td className="py-3 pr-5 sm:pr-6 text-right whitespace-nowrap">
-                                        {p.blockchain_tx ? (
-                                            <TxLink hash={p.blockchain_tx} chars={4} />
-                                        ) : (
-                                            <Badge>Not anchored</Badge>
-                                        )}
-                                    </td>
+                                    <td className="py-3 pr-5 sm:pr-6 text-right tabular-nums text-fg whitespace-nowrap">{formatCurrency(snapshotValue(p))}</td>
                                 </tr>
                             ))}
                         </tbody>

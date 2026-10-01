@@ -1,9 +1,10 @@
 # RiskLens
 
 Portfolio risk and diversification analysis. Enter your holdings and RiskLens
-measures volatility, concentration and correlation, explains the result in
-plain language with a local language model, and anchors a hash of each
-analysis on-chain with a zero-knowledge proof.
+measures volatility, concentration and correlation, then explains the result in
+plain language with a local language model. An optional identity check uses a
+zero-knowledge proof generated in your browser, so your details never leave
+your device.
 
 > Educational tool, not investment advice.
 
@@ -11,17 +12,28 @@ analysis on-chain with a zero-knowledge proof.
 
 | Part | Where | What it does |
 |---|---|---|
-| Frontend | `risklens-frontend/` | Next.js app (dashboard, analysis, history, stress tests) |
-| API | `backend/` | FastAPI: auth, analysis pipeline, persistence, proofs, chain |
+| Frontend | `risklens-frontend/` | Next.js app (dashboard, analysis, history, stress tests, identity check) |
+| API | `backend/` | FastAPI: auth, analysis pipeline, persistence, proof verification |
 | Risk engine | `ai_phase1/`, `ai_phase2/` | Asset-class scoring and market metrics from daily prices (Yahoo Finance) |
-| Behaviour | `ai_phase3/` | Learns from accept/reject feedback to tailor explanations (never the score) |
-| ZK circuits | `zk/` | Noir circuits for snapshot attestation and identity attestation |
-| Contracts | `blockchain/contracts/` | Verifier-backed attestation contracts |
+| Behaviour | `ai_phase3/` | Learns from accept/decline feedback to tailor explanations (never the score) |
+| Identity circuit | `zk/risklens_kyc_circuit/` | Noir circuit: 18+, country not restricted, salted commitment |
 | Database | MongoDB | Users, snapshots, decision logs |
 | Explanations / OCR | Ollama | Local LLM summary; screenshot import |
 
 The risk score (0–5) is 40% asset-class mix and 60% measured portfolio
 volatility. The language model only writes the explanation from those figures.
+
+### Identity check
+
+1. The browser hashes the name and document number, adds a random salt and
+   runs the circuit with `noir_js`, then proves it with `bb.js` (UltraHonk).
+2. Only the proof and its public values are sent: today's date and a salted
+   commitment to the details.
+3. The backend verifies the proof with the `bb` CLI against
+   `zk/risklens_kyc_circuit/vk/vk`, checks the date is current, and stores the
+   commitment. Names, birth dates and document numbers are never sent or stored.
+
+It's a demo of the technique, not a regulated KYC: details are self-reported.
 
 ## Run locally
 
@@ -39,11 +51,10 @@ volatility. The language model only writes the explanation from those figures.
   ollama pull llama3.2:3b   # explanations (use llama3.1:8b with ≥8 GB VRAM)
   ollama pull moondream     # screenshot import
   ```
-- Noir toolchain, as a matched pair:
+- Barretenberg `bb` (verifies identity proofs), as a pair with Noir:
   ```bash
-  noirup -v 1.0.0-beta.22 && bbup
+  noirup -v 1.0.0-beta.22 && bbup   # bb 5.0.0-nightly.20260522
   ```
-- [Foundry](https://getfoundry.sh) (`anvil`, `forge`), installed in `~/.foundry/bin`
 
 ### Setup (one time)
 
@@ -56,13 +67,7 @@ cp .env.example .env          # then set SECRET_KEY (see the comment in the file
 # Frontend
 cd ../risklens-frontend
 npm ci
-cat > .env.local <<'EOF'
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_CHAIN_ID=31337
-NEXT_PUBLIC_CHAIN_NAME=Local Anvil chain
-NEXT_PUBLIC_CHAIN_RPC_URL=http://127.0.0.1:8545
-NEXT_PUBLIC_EXPLORER_TX_URL=
-EOF
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 ```
 
 ### Start
@@ -71,32 +76,22 @@ EOF
 scripts/dev.sh
 ```
 
-This checks MongoDB, Ollama and the Noir toolchain, starts a local Anvil chain
-(state kept in `blockchain/.anvil-state.json`), deploys the contracts if they
-aren't on the chain yet (writing their addresses into both env files), then
-runs the API on <http://localhost:8000> and the app on <http://localhost:3000>.
-Ctrl+C stops everything.
+Checks MongoDB, Ollama and `bb`, then runs the API on <http://localhost:8000>
+and the app on <http://localhost:3000>. Ctrl+C stops both. Without Ollama,
+analyses still work but have no written explanation.
 
-Anything missing is skipped rather than fatal: without Ollama there's no
-written explanation, and without the Noir toolchain or chain the analysis is
-saved but not anchored.
+### Changing the identity circuit
 
-### Useful scripts
-
-| Script | Purpose |
-|---|---|
-| `scripts/dev.sh` | Run everything locally |
-| `scripts/local-chain.sh` | Run only the Anvil chain |
-| `scripts/deploy-local.sh` | Redeploy contracts; `REGENERATE=1` also rebuilds circuits, keys and Solidity verifiers |
-
-The local chain uses Anvil's public test account. Never reuse that key anywhere else.
+Edit `zk/risklens_kyc_circuit/src/main.nr`, then run `scripts/build-circuit.sh`.
+It runs the circuit tests, copies the compiled circuit to
+`risklens-frontend/public/circuits/` (used by the browser) and regenerates the
+verification key (used by the backend). Commit both. The `bb.js` and
+`noir_js` versions in `risklens-frontend/package.json` must match the CLI
+versions above.
 
 ## Known limitations
 
-- The snapshot-attestation circuit proves knowledge of the snapshot and claim
-  hashes; its risk inputs are placeholders, so it doesn't prove anything about
-  the risk score itself.
-- Identity attestation is self-reported (no document check) and is not a
-  regulated KYC.
+- Identity details are self-reported; a real KYC would need a signed source
+  (for example an e-passport chip) as the circuit's input.
 - Explanations come from a small local model and can still be wrong; the UI
   labels them and the computed figures are the source of truth.

@@ -22,10 +22,5 @@ env/
 
 # Generated data / build outputs
 ai_phase2/.cache/
-zk/*/proof/
-zk/*/Prover.toml
+zk/*/target/
 
-# Local chain
-blockchain/.local-build/
-blockchain/.anvil-state.json
-blockchain/.anvil.log

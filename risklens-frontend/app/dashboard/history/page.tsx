@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, History } from "lucide-react";
-import TxLink from "@/components/ui/TxLink";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
@@ -59,18 +58,14 @@ function DecisionDetails({ decision }: { decision: DecisionLog }) {
                 </div>
             )}
 
-            <div className="pt-4 border-t border-line space-y-2">
-                {decision.snapshot_hash && <HashRow label="Snapshot hash" value={decision.snapshot_hash} />}
-                {decision.identity_commitment_hash && <HashRow label="Identity hash" value={decision.identity_commitment_hash} />}
-                <div className="flex items-center justify-between gap-4 text-xs">
-                    <span className="text-muted">Transaction</span>
-                    {decision.blockchain_tx ? (
-                        <TxLink hash={decision.blockchain_tx} chars={8} />
-                    ) : (
-                        <span className="text-muted">None</span>
-                    )}
+            {decision.identity_commitment_hash && (
+                <div className="pt-4 border-t border-line space-y-2">
+                    <HashRow label="Identity fingerprint" value={decision.identity_commitment_hash} />
+                    <p className="text-xs text-muted">
+                        Verified with a zero-knowledge proof made in your browser. Your details were never sent.
+                    </p>
                 </div>
-            </div>
+            )}
         </div>
     );
 }
@@ -93,7 +88,7 @@ export default function HistoryPage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            <PageHeader title="History" description="Every saved analysis and identity attestation, newest first." />
+            <PageHeader title="History" description="Every saved analysis and identity check, newest first." />
 
             {decisions.length > 0 && (
                 <SegmentedControl<Filter>
@@ -107,7 +102,7 @@ export default function HistoryPage() {
                     options={[
                         { value: "all", label: "All" },
                         { value: "portfolio_analysis", label: "Analyses" },
-                        { value: "kyc_verification", label: "Attestations" },
+                        { value: "kyc_verification", label: "Identity checks" },
                     ]}
                 />
             )}
@@ -127,7 +122,7 @@ export default function HistoryPage() {
                     <EmptyState
                         icon={<History className="w-5 h-5" />}
                         title="Nothing here yet"
-                        description="Analyses you run are saved here with their findings and on-chain record."
+                        description="Analyses you run are saved here with their findings and explanation."
                         action={<Link href="/dashboard/portfolio" className={buttonStyles()}>Run an analysis</Link>}
                     />
                 </Card>
@@ -150,20 +145,16 @@ export default function HistoryPage() {
                                     >
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium text-fg">
-                                                {isAnalysis ? "Portfolio analysis" : "Identity attestation"}
+                                                {isAnalysis ? "Portfolio analysis" : "Identity check"}
                                             </p>
                                             <p className="text-xs text-muted mt-0.5">
                                                 {formatDate(d.created_at)} · {formatRelativeTime(d.created_at)}
                                             </p>
                                         </div>
-                                        <div className="hidden sm:flex items-center gap-2">
+                                        <div className="flex items-center gap-2">
                                             {risk && <RiskBadge level={risk.risk_level} />}
-                                            {risk && <span className="text-sm text-fg tabular-nums">{risk.risk_score.toFixed(2)}</span>}
-                                            {d.blockchain_status === "confirmed" ? (
-                                                <Badge tone="positive" dot>Anchored</Badge>
-                                            ) : (
-                                                <Badge dot>Not anchored</Badge>
-                                            )}
+                                            {risk && <span className="hidden sm:inline text-sm text-fg tabular-nums">{risk.risk_score.toFixed(2)}</span>}
+                                            {!isAnalysis && <Badge tone="positive" dot>Verified</Badge>}
                                         </div>
                                         <ChevronDown
                                             className={cn("w-4 h-4 text-muted transition-transform", isOpen && "rotate-180")}
@@ -172,11 +163,6 @@ export default function HistoryPage() {
                                     </button>
                                     {isOpen && (
                                         <div id={panelId}>
-                                            <div className="sm:hidden px-5 pb-3 flex flex-wrap gap-2">
-                                                <Badge tone={d.blockchain_status === "confirmed" ? "positive" : "neutral"} dot>
-                                                    {d.blockchain_status === "confirmed" ? "Anchored" : "Not anchored"}
-                                                </Badge>
-                                            </div>
                                             <DecisionDetails decision={d} />
                                         </div>
                                     )}

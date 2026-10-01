@@ -5,7 +5,7 @@ from fastapi.concurrency import run_in_threadpool
 from typing import List
 from fastapi.security import OAuth2PasswordRequestForm
 from models import (
-    PortfolioRequest, KYCRequest, UserCreate, UserLogin, 
+    PortfolioRequest, KYCProofRequest, UserCreate, UserLogin, 
     GoogleLogin, UserResponse, UserInDB, Token,
     RecommendationFeedback, SimulationRequest, BacktestRequest,
     VALID_FEEDBACK_ACTIONS
@@ -14,11 +14,7 @@ import auth
 import database
 from ai_service import run_ai_analysis
 from llm_service import generate_llm_explanation
-from zk_service import generate_zk_proof
-from zk_kyc_service import generate_kyc_proof
-from blockchain_service import submit_attestation
-from blockchain_kyc_service import submit_kyc_verification
-import chain
+from zk_kyc_service import verify_kyc_proof, InvalidProof
 from pricing_service import get_asset_price, get_bulk_prices
 from simulation_service import run_simulation
 from backtest_service import run_historical_backtest
@@ -27,6 +23,8 @@ from ocr_service import parse_screenshots
 
 
 import asyncio
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -167,25 +165,6 @@ def validate_portfolio_request(request: PortfolioRequest):
         )
 
 
-def validate_kyc_request(request: KYCRequest):
-    """Validate KYC input fields."""
-    if not request.full_name or len(request.full_name.strip()) < 2:
-        raise HTTPException(status_code=400, detail="Full name must be at least 2 characters.")
-
-    # The circuit takes age and country_code as u8, so out-of-range values fail proving
-    if request.age < 18 or request.age > 120:
-        raise HTTPException(status_code=400, detail="Age must be between 18 and 120.")
-
-    if not 1 <= request.country_code <= 255:
-        raise HTTPException(status_code=400, detail="Country code must be between 1 and 255.")
-
-    if request.country_code in (1, 2, 3):
-        raise HTTPException(status_code=400, detail="Country code is in the blacklisted range.")
-
-    if not request.document_id or len(request.document_id.strip()) < 4:
-        raise HTTPException(status_code=400, detail="Document ID must be at least 4 characters.")
-
-
 # ==============================
 # LIFECYCLE EVENTS
 # ==============================
@@ -288,7 +267,7 @@ def home():
 # ==============================
 
 @app.post("/analyze")
-async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False, current_user: UserResponse = Depends(auth.get_current_user)):
+async def analyze_portfolio(request: PortfolioRequest, current_user: UserResponse = Depends(auth.get_current_user)):
 
     # Input validation
     validate_portfolio_request(request)
@@ -349,62 +328,30 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
         logger.warning("LLM explanation failed: %s", str(e))
         explanation = "LLM explanation unavailable at the moment."
 
-    # Step 3 — snapshot hash
-    snapshot_string = json.dumps(portfolio_dict)
-    snapshot_hash = hashlib.sha256(snapshot_string.encode()).hexdigest()
+    # Step 3 — snapshot id: hash of the holdings + time, unique per analysis.
+    # Feedback and history refer to an analysis by this value.
+    created_at = utc_now_iso()
+    snapshot_hash = hashlib.sha256(f"{json.dumps(portfolio_dict)}|{created_at}".encode()).hexdigest()
 
-    # Step 4 — claim hash
-    claim_string = json.dumps(ai_result)
-    claim_hash = hashlib.sha256(claim_string.encode()).hexdigest()
-
-    # Steps 5–6 — ZK proof + on-chain anchoring. Both are optional: the
-    # analysis is saved and returned even if either is unavailable.
-    proof, public_inputs = None, None
-    tx_hash = None
-    blockchain_error = None
-    try:
-        proof, public_inputs = await run_in_threadpool(generate_zk_proof, snapshot_hash, claim_hash)
-    except Exception as e:
-        logger.warning("ZK proof generation failed (non-fatal): %s", str(e))
-        blockchain_error = "Proof generation is unavailable, so this snapshot wasn't anchored on-chain."
-
-    if proof and not wallet_mode:
-        if not chain.is_configured("CONTRACT_ADDRESS"):
-            blockchain_error = "On-chain anchoring is disabled on this server."
-        else:
-            try:
-                tx_hash = await run_in_threadpool(submit_attestation, proof, public_inputs)
-            except Exception as e:
-                logger.warning("Blockchain attestation failed (non-fatal): %s", str(e))
-                blockchain_error = f"On-chain submission failed: {e}"
-
-    # Step 7 — Save portfolio snapshot to MongoDB (always save)
+    # Step 4 — Save portfolio snapshot and decision log
     portfolios_collection = database.get_portfolios_collection()
-    portfolio_record = {
+    await portfolios_collection.insert_one({
         "user_email": current_user.email,
         "assets": portfolio_dict["assets"],
         "risk_profile": request.risk_profile,
         "snapshot_hash": snapshot_hash,
-        "blockchain_tx": tx_hash,
-        "blockchain_status": "confirmed" if tx_hash else "failed",
-        "created_at": utc_now_iso()
-    }
-    await portfolios_collection.insert_one(portfolio_record)
+        "created_at": created_at,
+    })
 
-    # Step 8 — Save AI decision log to MongoDB (always save)
     decisions_collection = database.get_decisions_collection()
-    decision_record = {
+    await decisions_collection.insert_one({
         "user_email": current_user.email,
         "action": "portfolio_analysis",
         "snapshot_hash": snapshot_hash,
-        "claim_hash": claim_hash,
         "ai_analysis": ai_result,
         "llm_explanation": explanation,
-        "blockchain_tx": tx_hash,
-        "blockchain_status": "confirmed" if tx_hash else "failed",
-        "created_at": utc_now_iso()
-    }
-    await decisions_collection.insert_one(decision_record)
+        "created_at": created_at,
+    })
 
     logger.info("Portfolio & decision saved for user: %s", current_user.email)
 
@@ -412,154 +359,53 @@ async def analyze_portfolio(request: PortfolioRequest, wallet_mode: bool = False
         "ai_analysis": ai_result,
         "llm_explanation": explanation,
         "snapshot_hash": snapshot_hash,
-        "claim_hash": claim_hash,
-        "zk_proof": proof,
-        "public_inputs": public_inputs,
-        "blockchain_tx": tx_hash,
-        "blockchain_status": "confirmed" if tx_hash else "failed"
+        "created_at": created_at,
     }
-
     if live_prices_used:
         response["live_prices_used"] = live_prices_used
-
-    if blockchain_error:
-        response["blockchain_warning"] = blockchain_error
-
     return response
 
 
 # ==============================
-# KYC VERIFICATION (validated)
+# IDENTITY ATTESTATION (zero-knowledge)
 # ==============================
 
 @app.post("/verify-kyc")
-async def verify_kyc(request: KYCRequest, wallet_mode: bool = False, current_user: UserResponse = Depends(auth.get_current_user)):
-
-    # Input validation
-    validate_kyc_request(request)
-
-    # Step 1 — Generate ZK proof from user's KYC data
+async def verify_kyc(request: KYCProofRequest, current_user: UserResponse = Depends(auth.get_current_user)):
+    """
+    Verify an identity proof generated in the user's browser. The server never
+    sees the user's details, only the proof and its public values.
+    """
     try:
-        proof, public_inputs, identity_hash = await run_in_threadpool(
-            generate_kyc_proof,
-            full_name=request.full_name,
-            date_of_birth=request.date_of_birth,
-            country_code=request.country_code,
-            document_id=request.document_id,
-            age=request.age
-        )
+        proof = base64.b64decode(request.proof, validate=True)
+        result = await run_in_threadpool(verify_kyc_proof, proof, request.public_inputs)
+    except (ValueError, binascii.Error):
+        raise HTTPException(status_code=400, detail="Proof isn't valid base64.")
+    except InvalidProof as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error("KYC ZK proof generation failed: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"KYC ZK proof generation failed: {str(e)}")
+        logger.error("Identity proof verification error: %s", str(e))
+        raise HTTPException(status_code=500, detail="Couldn't verify the proof right now.")
 
-    # Step 2 — Submit proof to RiskLensZKKYC contract on-chain (graceful)
-    tx_hash = None
-    blockchain_error = None
-    if not wallet_mode and not chain.is_configured("KYC_CONTRACT_ADDRESS"):
-        blockchain_error = "On-chain anchoring is disabled on this server."
-    elif not wallet_mode:
-        try:
-            tx_hash = await run_in_threadpool(submit_kyc_verification, proof, public_inputs)
-        except Exception as e:
-            logger.warning("KYC blockchain submission failed (non-fatal): %s", str(e))
-            blockchain_error = f"On-chain submission failed: {e}"
-
-    # Step 3 — Save KYC decision log to MongoDB (always save)
-    decisions_collection = database.get_decisions_collection()
-    kyc_record = {
+    verified_at = utc_now_iso()
+    await database.get_decisions_collection().insert_one({
         "user_email": current_user.email,
         "action": "kyc_verification",
-        "identity_commitment_hash": identity_hash,
-        "blockchain_tx": tx_hash,
-        "blockchain_status": "confirmed" if tx_hash else "failed",
-        "created_at": utc_now_iso()
-    }
-    await decisions_collection.insert_one(kyc_record)
-
-    # Step 4 — Mark user as KYC verified in users collection
-    users_collection = database.get_users_collection()
-    await users_collection.update_one(
+        "identity_commitment_hash": result["commitment"],
+        "proof_date": result["date"],
+        "created_at": verified_at,
+    })
+    await database.get_users_collection().update_one(
         {"email": current_user.email},
-        {"$set": {"kyc_verified": True if tx_hash else False, "kyc_tx": tx_hash}}
+        {"$set": {"kyc_verified": True, "kyc_commitment": result["commitment"], "kyc_verified_at": verified_at}},
     )
+    logger.info("Identity proof verified for user: %s", current_user.email)
 
-    logger.info("KYC decision saved for user: %s (tx: %s)", current_user.email, tx_hash or "none")
-
-    response = {
-        "status": "Attestation recorded on-chain" if tx_hash else "Proof generated but chain submission failed",
-        "identity_commitment_hash": identity_hash,
-        "zk_proof": proof,
-        "public_inputs": public_inputs,
-        "blockchain_tx": tx_hash,
-        "blockchain_status": "confirmed" if tx_hash else "failed"
+    return {
+        "status": "verified",
+        "identity_commitment_hash": result["commitment"],
+        "verified_at": verified_at,
     }
-
-    if blockchain_error:
-        response["blockchain_warning"] = blockchain_error
-
-    return response
-
-
-# ==============================
-# CONFIRM USER TRANSACTION
-# ==============================
-
-from pydantic import BaseModel as _BaseModel
-
-class ConfirmTxRequest(_BaseModel):
-    tx_hash: str
-    action: str  # "portfolio_analysis" or "kyc_verification"
-    snapshot_hash: str | None = None  # for portfolio
-
-@app.post("/confirm-tx")
-async def confirm_user_tx(request: ConfirmTxRequest, current_user: UserResponse = Depends(auth.get_current_user)):
-    """
-    Called by the frontend after the user hashes a transaction from their wallet.
-    Saves the tx_hash directly into the DB records.
-    """
-    tx_hash = request.tx_hash
-    if not tx_hash.startswith("0x"):
-        raise HTTPException(status_code=400, detail="Invalid transaction hash")
-
-    try:
-        decisions_collection = database.get_decisions_collection()
-        users_collection = database.get_users_collection()
-        portfolios_collection = database.get_portfolios_collection()
-
-        timestamp = utc_now_iso()
-
-        if request.action == "kyc_verification":
-            # Update users table
-            await users_collection.update_one(
-                {"email": current_user.email},
-                {"$set": {"kyc_verified": True, "kyc_tx": tx_hash}}
-            )
-            # Find the most recent unconfirmed KYC decision
-            await decisions_collection.update_one(
-                {"user_email": current_user.email, "action": "kyc_verification"},
-                {"$set": {"blockchain_tx": tx_hash, "blockchain_status": "confirmed"}},
-                sort=[("created_at", -1)]
-            )
-        elif request.action == "portfolio_analysis" and request.snapshot_hash:
-            # Update portfolio record
-            await portfolios_collection.update_one(
-                {"user_email": current_user.email, "snapshot_hash": request.snapshot_hash},
-                {"$set": {"blockchain_tx": tx_hash, "blockchain_status": "confirmed"}}
-            )
-            # Update decision record
-            await decisions_collection.update_one(
-                {"user_email": current_user.email, "snapshot_hash": request.snapshot_hash, "action": "portfolio_analysis"},
-                {"$set": {"blockchain_tx": tx_hash, "blockchain_status": "confirmed"}}
-            )
-        else:
-            raise HTTPException(status_code=400, detail="Invalid action or missing snapshot hash")
-
-        logger.info("User %s confirmed %s tx: %s", current_user.email, request.action, tx_hash)
-        return {"status": "success", "tx_hash": tx_hash}
-
-    except Exception as e:
-        logger.error("Failed to confirm user tx: %s", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==============================
@@ -759,7 +605,7 @@ async def simulate_portfolio(
 ):
     """
     Run a 'What-if' analysis. Identical to real analysis but 
-    skips ZK-proofs and blockchain for speed and privacy.
+    skips saving for speed and privacy.
     """
     # Validation
     validate_portfolio_request(request)

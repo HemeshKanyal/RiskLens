@@ -2,9 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { FlaskConical } from "lucide-react";
-import TxLink from "@/components/ui/TxLink";
 import Card, { CardHeader } from "@/components/ui/Card";
-import Badge from "@/components/ui/Badge";
 import Disclaimer from "@/components/ui/Disclaimer";
 import RiskMeter from "@/components/analysis/RiskMeter";
 import AllocationBar from "@/components/analysis/AllocationBar";
@@ -12,15 +10,8 @@ import HoldingsTable from "@/components/analysis/HoldingsTable";
 import Findings from "@/components/analysis/Findings";
 import Suggestions from "@/components/analysis/Suggestions";
 import { buildAnalysisView } from "@/lib/analysis";
-import { formatCurrency, truncateHash } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import type { RawAnalysis } from "@/lib/types";
-
-export interface OnChainRecord {
-    status: "confirmed" | "failed";
-    txHash: string | null;
-    snapshotHash: string;
-    warning?: string;
-}
 
 interface AnalysisResultsProps {
     analysis: RawAnalysis;
@@ -28,8 +19,8 @@ interface AnalysisResultsProps {
     livePrices?: Record<string, number>;
     lookbackDays?: number;
     asOf?: string;
-    // Absent for simulations, which are neither saved nor anchored
-    record?: OnChainRecord;
+    // Id of the saved analysis; absent for simulations, which aren't saved
+    snapshotHash?: string;
 }
 
 function ScoreComponent({
@@ -73,11 +64,11 @@ export default function AnalysisResults({
     livePrices,
     lookbackDays,
     asOf,
-    record,
+    snapshotHash,
 }: AnalysisResultsProps) {
     const view = useMemo(() => buildAnalysisView(analysis), [analysis]);
     const [expanded, setExpanded] = useState(false);
-    const isSimulation = !record;
+    const isSimulation = !snapshotHash;
     const windowLabel = lookbackDays ? `${lookbackDays}-day` : "lookback";
 
     return (
@@ -87,7 +78,7 @@ export default function AnalysisResults({
                     <FlaskConical className="w-4 h-4 text-accent-text mt-0.5 shrink-0" aria-hidden="true" />
                     <p className="text-sm text-fg-2">
                         <span className="font-medium text-fg">What-if simulation.</span> Nothing was saved to your
-                        history or recorded on-chain.
+                        history.
                     </p>
                 </div>
             )}
@@ -162,7 +153,7 @@ export default function AnalysisResults({
                 </Card>
                 <Card>
                     <CardHeader title="Suggested changes" description="Based on your selected risk profile" />
-                    <Suggestions suggestions={view.suggestions} snapshotHash={record?.snapshotHash} />
+                    <Suggestions suggestions={view.suggestions} snapshotHash={snapshotHash} />
                 </Card>
             </div>
 
@@ -188,40 +179,17 @@ export default function AnalysisResults({
                 </Card>
             )}
 
-            {(record || (livePrices && Object.keys(livePrices).length > 0)) && (
+            {livePrices && Object.keys(livePrices).length > 0 && (
                 <Card>
-                    <div className="grid gap-6 sm:grid-cols-2">
-                        {livePrices && Object.keys(livePrices).length > 0 && (
-                            <div>
-                                <h3 className="text-xs font-medium text-muted mb-2">Live prices used</h3>
-                                <ul className="flex flex-wrap gap-2">
-                                    {Object.entries(livePrices).map(([symbol, price]) => (
-                                        <li key={symbol} className="text-xs px-2 py-1 rounded-md bg-surface-2">
-                                            <span className="font-mono text-fg">{symbol}</span>{" "}
-                                            <span className="text-muted tabular-nums">{formatCurrency(price)}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                        {record && (
-                            <div>
-                                <h3 className="text-xs font-medium text-muted mb-2">On-chain timestamp</h3>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Badge tone={record.status === "confirmed" ? "positive" : "neutral"} dot>
-                                        {record.status === "confirmed" ? "Snapshot hash anchored" : "Not anchored"}
-                                    </Badge>
-                                    {record.txHash && (
-                                        <TxLink hash={record.txHash} chars={6} />
-                                    )}
-                                </div>
-                                <p className="mt-2 text-xs text-muted font-mono break-all">
-                                    Snapshot {truncateHash(record.snapshotHash, 10)}
-                                </p>
-                                {record.warning && <p className="mt-2 text-xs text-warning-text">{record.warning}</p>}
-                            </div>
-                        )}
-                    </div>
+                    <h3 className="text-xs font-medium text-muted mb-2">Live prices used</h3>
+                    <ul className="flex flex-wrap gap-2">
+                        {Object.entries(livePrices).map(([symbol, price]) => (
+                            <li key={symbol} className="text-xs px-2 py-1 rounded-md bg-surface-2">
+                                <span className="font-mono text-fg">{symbol}</span>{" "}
+                                <span className="text-muted tabular-nums">{formatCurrency(price)}</span>
+                            </li>
+                        ))}
+                    </ul>
                 </Card>
             )}
 

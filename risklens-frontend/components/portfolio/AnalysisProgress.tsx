@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { CHAIN } from "@/lib/chain";
-import { CheckCircle, Loader2, XCircle, Wallet } from "lucide-react";
+import { CheckCircle, Loader2, XCircle } from "lucide-react";
 
 // Only states the client can actually observe. The backend runs pricing,
 // risk analysis, explanation and proof generation inside a single request,
@@ -10,7 +9,6 @@ import { CheckCircle, Loader2, XCircle, Wallet } from "lucide-react";
 export type AnalysisStep =
     | "idle"
     | "server"
-    | "wallet"
     | "done"
     | "error";
 
@@ -25,7 +23,7 @@ const DEFAULT_SERVER_TASKS = [
     "Resolve live prices for assets without a value",
     "Compute allocation, volatility and correlation metrics",
     "Generate a plain-language explanation",
-    `Hash the snapshot and anchor it on ${CHAIN.name}`,
+    "Save the analysis to your history",
 ];
 
 // Counts from mount; the parent remounts this component (via `key`) per run.
@@ -53,7 +51,7 @@ export default function AnalysisProgress({
     error,
     serverTasks = DEFAULT_SERVER_TASKS,
 }: AnalysisProgressProps) {
-    const isRunning = currentStep === "server" || currentStep === "wallet";
+    const isRunning = currentStep === "server";
     const elapsed = useElapsedSeconds(isRunning);
 
     if (currentStep === "idle") return null;
@@ -63,9 +61,7 @@ export default function AnalysisProgress({
             ? "Analysis complete"
             : currentStep === "error"
               ? "Analysis failed"
-              : currentStep === "wallet"
-                ? "Waiting for wallet signature"
-                : "Analyzing portfolio";
+              : "Analyzing portfolio";
 
     return (
         <div
@@ -78,8 +74,6 @@ export default function AnalysisProgress({
                     <CheckCircle className="w-5 h-5 text-positive-text" />
                 ) : currentStep === "error" ? (
                     <XCircle className="w-5 h-5 text-negative-text" />
-                ) : currentStep === "wallet" ? (
-                    <Wallet className="w-5 h-5 text-accent animate-pulse" />
                 ) : (
                     <Loader2 className="w-5 h-5 text-accent animate-spin" />
                 )}
@@ -102,7 +96,7 @@ export default function AnalysisProgress({
                 <div className="space-y-2">
                     <p className="text-xs text-muted">
                         The server is working through these steps. This usually takes under a
-                        minute but can take longer when market data or the testnet is slow.
+                        minute; the first run is slower while the language model loads.
                     </p>
                     <ul className="space-y-1 text-xs text-fg-2 list-disc pl-5">
                         {serverTasks.map((task) => (
@@ -110,13 +104,6 @@ export default function AnalysisProgress({
                         ))}
                     </ul>
                 </div>
-            )}
-
-            {currentStep === "wallet" && (
-                <p className="text-xs text-muted">
-                    Analysis is ready. Confirm the transaction in your wallet to record the
-                    snapshot hash on-chain. Rejecting it will cancel this analysis.
-                </p>
             )}
 
             {error && (
