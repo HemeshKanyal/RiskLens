@@ -52,40 +52,29 @@ export function formatRelativeTime(dateStr: string): string {
   return formatDate(dateStr);
 }
 
-/**
- * Get a color for risk level.
- */
-export function getRiskColor(level: string): string {
-  switch (level.toLowerCase()) {
-    case "low":
-      return "#10B981"; // emerald
-    case "moderate":
-      return "#F59E0B"; // amber
-    case "high":
-      return "#EF4444"; // red
-    default:
-      return "#6B7280"; // gray
-  }
+// Asset classes keep a fixed categorical slot (validated order), so a class
+// is always the same color regardless of which classes are present.
+export const ASSET_CLASSES = ["stock", "crypto", "etf", "bond", "commodity"] as const;
+
+export function getAssetTypeColor(type: string): string {
+  const slot = ASSET_CLASSES.indexOf(type.toLowerCase() as (typeof ASSET_CLASSES)[number]);
+  return slot === -1 ? "var(--series-muted)" : `var(--series-${slot + 1})`;
+}
+
+export function assetClassLabel(type: string): string {
+  return type.toLowerCase() === "etf" ? "ETF" : capitalize(type);
 }
 
 /**
- * Get a color for an asset type.
+ * Compact currency for tight spaces: $1.2K, $65.1K, $4.2M.
  */
-export function getAssetTypeColor(type: string): string {
-  switch (type.toLowerCase()) {
-    case "stock":
-      return "#3B82F6"; // blue
-    case "crypto":
-      return "#A855F7"; // purple
-    case "etf":
-      return "#06B6D4"; // cyan
-    case "bond":
-      return "#10B981"; // emerald
-    case "commodity":
-      return "#F59E0B"; // amber
-    default:
-      return "#6B7280"; // gray
-  }
+export function formatCompactCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 /**

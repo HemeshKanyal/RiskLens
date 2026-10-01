@@ -1,30 +1,47 @@
 import React from "react";
+import { cn } from "@/lib/cn";
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: "primary" | "secondary" | "ghost";
-    children: React.ReactNode;
-}
+type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Size = "sm" | "md" | "lg";
 
-const variants = {
-    primary:
-        "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg shadow-blue-500/20",
-    secondary:
-        "bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] text-white",
-    ghost: "hover:bg-white/[0.06] text-gray-400 hover:text-white",
+const variants: Record<Variant, string> = {
+    primary: "bg-accent-solid text-white hover:bg-accent-solid-hover",
+    secondary: "bg-surface border border-line-strong text-fg hover:bg-surface-2",
+    ghost: "text-fg-2 hover:text-fg hover:bg-surface-2",
+    danger: "bg-surface border border-line-strong text-negative-text hover:bg-negative-soft",
 };
 
-export default function Button({
+const sizes: Record<Size, string> = {
+    sm: "h-8 px-3 text-xs gap-1.5",
+    md: "h-9 px-4 text-sm gap-2",
+    lg: "h-11 px-5 text-sm gap-2",
+};
+
+export function buttonStyles({
     variant = "primary",
-    children,
-    className = "",
+    size = "md",
+    className,
+}: { variant?: Variant; size?: Size; className?: string } = {}) {
+    return cn(
+        "inline-flex items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        variants[variant],
+        sizes[size],
+        className
+    );
+}
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+    variant?: Variant;
+    size?: Size;
+}
+
+export default function Button({
+    variant,
+    size,
+    className,
+    type = "button",
     ...props
 }: ButtonProps) {
-    return (
-        <button
-            className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 cursor-pointer ${variants[variant]} ${className}`}
-            {...props}
-        >
-            {children}
-        </button>
-    );
+    return <button type={type} className={buttonStyles({ variant, size, className })} {...props} />;
 }

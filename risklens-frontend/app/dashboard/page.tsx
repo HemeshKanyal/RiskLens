@@ -1,201 +1,172 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import MetricCard from "@/components/dashboard/MetricCard";
-import AllocationChart from "@/components/dashboard/AllocationChart";
-import AIInsightCard from "@/components/dashboard/AIInsightCard";
-import PortfolioList from "@/components/dashboard/PortfolioList";
-import { getPortfolioHistory, getDecisionLogs, exportReport } from "@/lib/api";
-import type { PortfolioSnapshot, DecisionLog } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
-import { DollarSign, TrendingUp, ShieldCheck, Plus, FileText, FileSpreadsheet } from "lucide-react";
-import toast from "react-hot-toast";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { FileSpreadsheet, FileText, LineChart } from "lucide-react";
+import toast from "react-hot-toast";
+import Card, { CardHeader } from "@/components/ui/Card";
+import PageHeader from "@/components/ui/PageHeader";
+import Stat from "@/components/ui/Stat";
+import Button, { buttonStyles } from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
+import Skeleton from "@/components/ui/Skeleton";
+import RiskMeter, { RiskBadge } from "@/components/analysis/RiskMeter";
+import AllocationBar from "@/components/analysis/AllocationBar";
+import Findings from "@/components/analysis/Findings";
+import RecentSnapshots, { snapshotValue } from "@/components/dashboard/RecentSnapshots";
+import { getPortfolioHistory, getDecisionLogs, exportReport, extractError } from "@/lib/api";
+import { buildAnalysisView } from "@/lib/analysis";
+import type { PortfolioSnapshot, DecisionLog } from "@/lib/types";
+import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 
 export default function DashboardPage() {
     const [portfolios, setPortfolios] = useState<PortfolioSnapshot[]>([]);
     const [decisions, setDecisions] = useState<DecisionLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
 
     useEffect(() => {
-        async function loadData() {
-            try {
-                const [pRes, dRes] = await Promise.all([
-                    getPortfolioHistory(),
-                    getDecisionLogs(),
-                ]);
-                setPortfolios(pRes.portfolios);
-                setDecisions(dRes.decisions);
-            } catch (error) {
-                console.error("Failed to load dashboard data:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        loadData();
+        Promise.all([getPortfolioHistory(), getDecisionLogs()])
+            .then(([p, d]) => {
+                setPortfolios(p.portfolios);
+                setDecisions(d.decisions);
+            })
+            .catch((err) => setLoadError(extractError(err)))
+            .finally(() => setIsLoading(false));
     }, []);
 
-    // Compute metrics from real data
     const latestPortfolio = portfolios[0];
-    const totalValue = latestPortfolio
-        ? latestPortfolio.assets.reduce((sum, a) => sum + (a.value || 0), 0)
-        : 0;
+    const analyses = decisions.filter((d) => d.action === "portfolio_analysis");
+    const latest = analyses.find((d) => d.ai_analysis);
+    const view = latest?.ai_analysis ? buildAnalysisView(latest.ai_analysis) : null;
+    const anchored = analyses.filter((d) => d.blockchain_status === "confirmed").length;
 
-    // Get latest decision with AI analysis
-    const latestAnalysis = decisions.find(
-        (d) => d.action === "portfolio_analysis" && d.ai_analysis
-    );
-    const riskScore =
-        (latestAnalysis?.ai_analysis as Record<string, unknown>)?.risk as Record<string, unknown> | undefined;
-    const healthScore = riskScore
-        ? Math.round(((5 - (riskScore.risk_score as number)) / 5) * 100)
-        : null;
-    const riskLevel = riskScore?.risk_level as string | undefined;
+    const classWeights: Record<string, number> = {};
+    if (latestPortfolio) {
+        const total = snapshotValue(latestPortfolio) || 1;
+        for (const a of latestPortfolio.assets) classWeights[a.type] = (classWeights[a.type] || 0) + ((a.value || 0) / total) * 100;
+    }
+
+    const runExport = async (format: "csv" | "pdf") => {
+        const id = `export-${format}`;
+        toast.loading(`Preparing ${format.toUpperCase()}…`, { id });
+        try {
+            await exportReport(format);
+            toast.success(`${format.toUpperCase()} downloaded`, { id });
+        } catch (err) {
+            toast.error(extractError(err), { id });
+        }
+    };
 
     const hasData = portfolios.length > 0;
 
     return (
-        <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="max-w-7xl mx-auto space-y-6"
-        >
-            {/* Page Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-[family-name:var(--font-outfit)] font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                        Dashboard
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        {hasData
-                            ? "Your portfolio overview and AI insights"
-                            : "Get started by adding your first portfolio"}
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    {hasData && (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        toast.loading("Exporting CSV...", { id: "export-csv" });
-                                        await exportReport("csv");
-                                        toast.success("CSV Downloaded", { id: "export-csv" });
-                                    } catch (err) {
-                                        toast.error("Failed to export CSV", { id: "export-csv" });
-                                    }
-                                }}
-                                className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm font-medium text-gray-300 hover:bg-white/[0.1] transition-all flex items-center gap-1.5"
-                                title="Export CSV"
-                            >
-                                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                                <span className="hidden sm:inline">CSV</span>
-                            </button>
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        toast.loading("Exporting PDF...", { id: "export-pdf" });
-                                        await exportReport("pdf");
-                                        toast.success("PDF Downloaded", { id: "export-pdf" });
-                                    } catch (err) {
-                                        toast.error("Failed to export PDF", { id: "export-pdf" });
-                                    }
-                                }}
-                                className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm font-medium text-gray-300 hover:bg-white/[0.1] transition-all flex items-center gap-1.5"
-                                title="Export PDF"
-                            >
-                                <FileText className="w-4 h-4 text-purple-400" />
-                                <span className="hidden sm:inline">PDF</span>
-                            </button>
-                        </div>
-                    )}
-                    <Link
-                        href="/dashboard/portfolio"
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-sm font-medium text-white hover:from-blue-600 hover:to-purple-700 transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] flex items-center gap-2 tracking-wide"
-                    >
-                        <Plus className="w-4 h-4" />
-                        New Analysis
-                    </Link>
-                </div>
-            </div>
-
-            {/* Top Row: Metric Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <MetricCard
-                    label="Total Portfolio Value"
-                    value={hasData ? formatCurrency(totalValue) : "—"}
-                    change={
-                        hasData
-                            ? `${portfolios.length} snapshot${portfolios.length > 1 ? "s" : ""} recorded`
-                            : "No data yet"
-                    }
-                    changeType="neutral"
-                    isLoading={isLoading}
-                    icon={<DollarSign className="w-5 h-5" />}
-                />
-                <MetricCard
-                    label="Analyses Run"
-                    value={
-                        hasData
-                            ? String(
-                                  decisions.filter(
-                                      (d) => d.action === "portfolio_analysis"
-                                  ).length
-                              )
-                            : "0"
-                    }
-                    change={
-                        hasData
-                            ? `${decisions.filter((d) => d.blockchain_status === "confirmed").length} anchored on-chain`
-                            : "Run your first analysis"
-                    }
-                    changeType={hasData ? "positive" : "neutral"}
-                    isLoading={isLoading}
-                    icon={<TrendingUp className="w-5 h-5" />}
-                />
-                <MetricCard
-                    label="Portfolio Health Score"
-                    value={
-                        healthScore !== null
-                            ? `${healthScore} / 100`
-                            : "—"
-                    }
-                    change={
-                        riskLevel
-                            ? `Risk: ${riskLevel}`
-                            : "Analyze a portfolio to see"
-                    }
-                    changeType={
-                        riskLevel === "Low"
-                            ? "positive"
-                            : riskLevel === "High"
-                              ? "negative"
-                              : "neutral"
-                    }
-                    isLoading={isLoading}
-                    icon={<ShieldCheck className="w-5 h-5" />}
-                />
-            </div>
-
-            {/* Middle Row: Chart + AI Insight */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <AllocationChart
-                    assets={latestPortfolio?.assets || []}
-                    isLoading={isLoading}
-                />
-                <AIInsightCard
-                    decision={latestAnalysis || null}
-                    isLoading={isLoading}
-                />
-            </div>
-
-            {/* Bottom Row: Portfolio List */}
-            <PortfolioList
-                portfolios={portfolios}
-                isLoading={isLoading}
+        <div className="max-w-6xl mx-auto space-y-6">
+            <PageHeader
+                title="Overview"
+                description={hasData ? "Your latest analysis and saved snapshots." : undefined}
+                actions={
+                    <>
+                        {hasData && (
+                            <>
+                                <Button variant="secondary" size="sm" onClick={() => runExport("csv")}>
+                                    <FileSpreadsheet className="w-4 h-4" aria-hidden="true" />
+                                    CSV
+                                </Button>
+                                <Button variant="secondary" size="sm" onClick={() => runExport("pdf")}>
+                                    <FileText className="w-4 h-4" aria-hidden="true" />
+                                    PDF
+                                </Button>
+                            </>
+                        )}
+                        <Link href="/dashboard/portfolio" className={buttonStyles({ size: "sm" })}>
+                            New analysis
+                        </Link>
+                    </>
+                }
             />
-        </motion.div>
+
+            {loadError && (
+                <p role="alert" className="px-4 py-3 rounded-lg bg-negative-soft text-sm text-negative-text">
+                    Couldn&apos;t load your data: {loadError}
+                </p>
+            )}
+
+            {!isLoading && !hasData && !loadError ? (
+                <Card>
+                    <EmptyState
+                        icon={<LineChart className="w-5 h-5" />}
+                        title="No analyses yet"
+                        description="Add your holdings to see how risky your portfolio is, where the risk comes from, and how diversified it really is."
+                        action={
+                            <Link href="/dashboard/portfolio" className={buttonStyles()}>
+                                Analyze a portfolio
+                            </Link>
+                        }
+                    />
+                </Card>
+            ) : (
+                <>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        <Stat
+                            label="Portfolio value"
+                            isLoading={isLoading}
+                            value={latestPortfolio ? formatCurrency(snapshotValue(latestPortfolio)) : "—"}
+                            hint={latestPortfolio ? `At last analysis, ${formatRelativeTime(latestPortfolio.created_at)}` : undefined}
+                        />
+                        <Stat
+                            label="Latest risk score"
+                            isLoading={isLoading}
+                            value={view ? <>{view.score.toFixed(2)}<span className="text-sm font-normal text-muted"> / 5</span></> : "—"}
+                            hint={view ? <RiskBadge level={view.level} /> : undefined}
+                        />
+                        <Stat
+                            label="Analyses"
+                            isLoading={isLoading}
+                            value={analyses.length}
+                            hint={`${anchored} anchored on-chain`}
+                        />
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-3">
+                        <Card className="lg:col-span-2">
+                            <CardHeader
+                                title="Latest analysis"
+                                description={latest ? formatRelativeTime(latest.created_at) : undefined}
+                                action={
+                                    <Link href="/dashboard/history" className="text-xs font-medium text-accent-text hover:underline">
+                                        Full details
+                                    </Link>
+                                }
+                            />
+                            {isLoading ? (
+                                <div className="space-y-3">
+                                    <Skeleton className="h-10 w-40" />
+                                    <Skeleton className="h-2" />
+                                    <Skeleton className="h-16" />
+                                </div>
+                            ) : view ? (
+                                <div className="grid gap-6 md:grid-cols-[minmax(0,14rem)_1fr]">
+                                    <RiskMeter score={view.score} level={view.level} size="sm" />
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-medium text-muted mb-2">Top findings</p>
+                                        <Findings findings={view.findings} limit={3} expandable={false} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted">No analysis details saved.</p>
+                            )}
+                        </Card>
+
+                        <Card>
+                            <CardHeader title="Allocation" description="By asset class, at last analysis" />
+                            {isLoading ? <Skeleton className="h-16" /> : <AllocationBar weights={classWeights} />}
+                        </Card>
+                    </div>
+
+                    <RecentSnapshots portfolios={portfolios} isLoading={isLoading} />
+                </>
+            )}
+        </div>
     );
 }

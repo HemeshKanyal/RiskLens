@@ -16,8 +16,6 @@ import type {
   DecisionLog,
   PriceResult,
   ScreenshotResult,
-  AssetMetrics,
-  QuickRiskResult,
 } from "./types";
 
 const API_BASE_URL =
@@ -207,27 +205,6 @@ export async function parseScreenshot(files: File[]): Promise<ScreenshotResult> 
     formData,
     { headers: { "Content-Type": "multipart/form-data" } }
   );
-  return data;
-}
-
-// ==============================
-// MARKET RISK (Phase 2)
-// ==============================
-
-export async function getAssetMetrics(
-  symbol: string,
-  lookbackDays = 90
-): Promise<{ status: string; data: AssetMetrics }> {
-  const { data } = await api.get(`/api/market-risk/asset/${symbol}`, {
-    params: { lookback_days: lookbackDays },
-  });
-  return data;
-}
-
-export async function getQuickRisk(
-  request: PortfolioRequest
-): Promise<{ status: string; data: QuickRiskResult }> {
-  const { data } = await api.post("/api/market-risk/quick-risk", request);
   return data;
 }
 

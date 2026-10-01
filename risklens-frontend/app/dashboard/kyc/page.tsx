@@ -1,92 +1,94 @@
 "use client";
 
 import React, { useState } from "react";
-import Card from "@/components/ui/Card";
+import { ExternalLink, Info, Loader2 } from "lucide-react";
+import Card, { CardHeader } from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
+import PageHeader from "@/components/ui/PageHeader";
+import { Field, Input } from "@/components/ui/Field";
 import { verifyKYC, confirmTx, extractError } from "@/lib/api";
 import { useWallet } from "@/lib/wallet-context";
-import type { KYCResponse } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
+import type { KYCResponse } from "@/lib/types";
 import { truncateHash, getEtherscanUrl } from "@/lib/utils";
-import toast from "react-hot-toast";
-import {
-    ShieldCheck,
-    Loader2,
-    CheckCircle,
-    ExternalLink,
-    AlertTriangle,
-} from "lucide-react";
+
+// Demo circuit rule (zk/risklens_kyc_circuit): codes 1–3 are treated as restricted
+const RESTRICTED_CODES = [1, 2, 3];
+
+type Errors = Partial<Record<"name" | "dob" | "country" | "doc" | "form", string>>;
+
+function ageFrom(dob: string): number | null {
+    const d = new Date(dob);
+    if (Number.isNaN(d.getTime())) return null;
+    const now = new Date();
+    let age = now.getFullYear() - d.getFullYear();
+    const beforeBirthday = now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate());
+    if (beforeBirthday) age -= 1;
+    return age;
+}
 
 export default function KYCPage() {
     const { user } = useAuth();
+    const { isConnected, submitKYC } = useWallet();
     const [fullName, setFullName] = useState(user?.full_name || "");
-    const [dateOfBirth, setDateOfBirth] = useState("");
+    const [dob, setDob] = useState("");
     const [countryCode, setCountryCode] = useState("");
     const [documentId, setDocumentId] = useState("");
-    const [age, setAge] = useState("");
+    const [errors, setErrors] = useState<Errors>({});
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<KYCResponse | null>(null);
 
-    const { isConnected, submitKYC } = useWallet();
+    const validate = (): Errors => {
+        const e: Errors = {};
+        if (fullName.trim().length < 2) e.name = "Enter your full name.";
+        const age = ageFrom(dob);
+        if (age === null) e.dob = "Enter your date of birth.";
+        else if (age < 18) e.dob = "You must be 18 or older.";
+        else if (age > 120) e.dob = "Check the year.";
+        const code = Number(countryCode);
+        if (!Number.isInteger(code) || code < 1 || code > 255) e.country = "Enter a number from 1 to 255.";
+        else if (RESTRICTED_CODES.includes(code)) e.country = "This code is on the demo restricted list.";
+        if (documentId.trim().length < 4) e.doc = "Enter at least 4 characters.";
+        return e;
+    };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!fullName.trim() || !dateOfBirth || !countryCode || !documentId.trim() || !age) {
-            toast.error("Please fill all fields");
-            return;
-        }
-
-        const ageNum = parseInt(age);
-        const countryNum = parseInt(countryCode);
-
-        if (ageNum < 18) {
-            toast.error("You must be at least 18 years old");
-            return;
-        }
-
-        if ([1, 2, 3].includes(countryNum)) {
-            toast.error("This country code is restricted");
-            return;
-        }
+    const handleSubmit = async (ev: React.FormEvent) => {
+        ev.preventDefault();
+        const found = validate();
+        setErrors(found);
+        if (Object.keys(found).length > 0) return;
 
         setIsLoading(true);
         setResult(null);
-
         try {
             const data = await verifyKYC(
                 {
                     full_name: fullName.trim(),
-                    date_of_birth: dateOfBirth,
-                    country_code: countryNum,
+                    date_of_birth: dob,
+                    country_code: Number(countryCode),
                     document_id: documentId.trim(),
-                    age: ageNum,
+                    age: ageFrom(dob)!,
                 },
-                isConnected // wallet_mode
+                isConnected
             );
 
-            // If wallet connected, submit from user's wallet
             if (isConnected && data.zk_proof && data.public_inputs) {
                 try {
                     const txHash = await submitKYC(data.zk_proof, data.public_inputs);
                     data.blockchain_tx = txHash;
                     data.blockchain_status = "confirmed";
-                    data.status = "Attestation recorded on-chain (your wallet)";
+                    data.status = "Attestation recorded on-chain from your wallet";
                     delete data.blockchain_warning;
-                    await confirmTx({
-                        tx_hash: txHash,
-                        action: "kyc_verification",
-                    });
+                    await confirmTx({ tx_hash: txHash, action: "kyc_verification" });
                 } catch (walletErr) {
-                    const msg = walletErr instanceof Error ? walletErr.message : "Wallet transaction failed";
-                    data.blockchain_warning = msg;
+                    data.blockchain_warning = walletErr instanceof Error ? walletErr.message : "Wallet transaction failed";
                     data.blockchain_status = "failed";
                 }
             }
-
             setResult(data);
-            toast.success("KYC verification complete!");
         } catch (err) {
-            toast.error(extractError(err));
+            setErrors({ form: extractError(err) });
         } finally {
             setIsLoading(false);
         }
@@ -94,183 +96,103 @@ export default function KYCPage() {
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                    KYC Verification
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Create an on-chain identity attestation (testnet demo)
-                </p>
-            </div>
+            <PageHeader
+                title="Identity attestation"
+                description="Record a hash of your identity details on the Sepolia testnet. This is a demo, not a regulated KYC check."
+            />
 
-            {/* Info banner */}
-            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
-                <ShieldCheck className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
-                <div>
-                    <p className="text-sm text-blue-300 font-medium">
-                        How your data is handled
+            <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-accent-soft">
+                <Info className="w-4 h-4 text-accent-text mt-0.5 shrink-0" aria-hidden="true" />
+                <div className="text-sm text-fg-2 space-y-1">
+                    <p>
+                        Your details are sent to the RiskLens server over HTTPS to build the proof, then discarded. Only a
+                        hash of them is stored and anchored on-chain.
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                        Your details are sent to the RiskLens server over HTTPS to build the proof, then discarded.
-                        Only a hash of them is stored and anchored on-chain. Details are self-reported and no
-                        document check is performed, so this is not a regulated KYC.
-                    </p>
+                    <p className="text-xs text-muted">Details are self-reported. No document is checked.</p>
                 </div>
             </div>
 
-            {/* Form */}
+            {user?.kyc_verified && !result && (
+                <p className="text-sm text-fg-2">
+                    <Badge tone="positive" dot>Attested</Badge> You already have an attestation. Submitting again creates a new one.
+                </p>
+            )}
+
             <Card>
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
-                                Full Name
-                            </label>
-                            <input
-                                type="text"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                placeholder="Your full legal name"
-                                disabled={isLoading}
-                                className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-gray-600 outline-none focus:border-blue-500/50 transition-all disabled:opacity-50"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
-                                Date of Birth
-                            </label>
-                            <input
-                                type="date"
-                                value={dateOfBirth}
-                                onChange={(e) => setDateOfBirth(e.target.value)}
-                                disabled={isLoading}
-                                className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white outline-none focus:border-blue-500/50 transition-all disabled:opacity-50 [color-scheme:dark]"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
-                                Country Code
-                            </label>
-                            <input
+                <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Full legal name" error={errors.name}>
+                            <Input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={isLoading} />
+                        </Field>
+                        <Field label="Date of birth" error={errors.dob}>
+                            <Input type="date" autoComplete="bday" value={dob} onChange={(e) => setDob(e.target.value)} disabled={isLoading} />
+                        </Field>
+                        <Field label="Country code" hint="Numeric, 1–255. Codes 1–3 are a demo restricted list." error={errors.country}>
+                            <Input
                                 type="number"
+                                inputMode="numeric"
+                                min={1}
+                                max={255}
                                 value={countryCode}
                                 onChange={(e) => setCountryCode(e.target.value)}
-                                placeholder="e.g., 91 for India"
-                                min="4"
                                 disabled={isLoading}
-                                className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-gray-600 outline-none focus:border-blue-500/50 transition-all disabled:opacity-50"
                             />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
-                                Age
-                            </label>
-                            <input
-                                type="number"
-                                value={age}
-                                onChange={(e) => setAge(e.target.value)}
-                                placeholder="Must be 18+"
-                                min="18"
-                                disabled={isLoading}
-                                className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-gray-600 outline-none focus:border-blue-500/50 transition-all disabled:opacity-50"
-                            />
-                        </div>
+                        </Field>
+                        <Field label="Document number" hint="Passport or national ID" error={errors.doc}>
+                            <Input value={documentId} onChange={(e) => setDocumentId(e.target.value)} disabled={isLoading} autoComplete="off" />
+                        </Field>
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
-                            Document ID (Passport / National ID)
-                        </label>
-                        <input
-                            type="text"
-                            value={documentId}
-                            onChange={(e) => setDocumentId(e.target.value)}
-                            placeholder="Your document number"
-                            disabled={isLoading}
-                            className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-gray-600 outline-none focus:border-blue-500/50 transition-all disabled:opacity-50"
-                        />
-                    </div>
+                    {errors.form && (
+                        <p role="alert" className="text-sm text-negative-text">{errors.form}</p>
+                    )}
 
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-sm font-semibold text-white hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {isLoading ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Generating ZK proof & verifying...
-                            </>
-                        ) : (
-                            <>
-                                <ShieldCheck className="w-5 h-5" />
-                                Verify Identity
-                            </>
-                        )}
-                    </button>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
+                        <p className="text-xs text-muted">
+                            {isConnected ? "Your wallet will be asked to sign the transaction." : "The RiskLens server submits the transaction."}
+                        </p>
+                        <Button type="submit" disabled={isLoading}>
+                            {isLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                            {isLoading ? "Generating proof…" : "Create attestation"}
+                        </Button>
+                    </div>
                 </form>
             </Card>
 
-            {/* Result */}
             {result && (
-                <Card>
-                    <div className="flex items-center gap-3 mb-5">
-                        {result.blockchain_status === "confirmed" ? (
-                            <CheckCircle className="w-6 h-6 text-emerald-400" />
-                        ) : (
-                            <AlertTriangle className="w-6 h-6 text-amber-400" />
-                        )}
-                        <div>
-                            <h3 className="text-lg font-semibold text-white">
-                                {result.status}
-                            </h3>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                            <span className="text-xs text-gray-500">Identity Hash</span>
-                            <span className="text-xs text-white font-mono">
-                                {truncateHash(result.identity_commitment_hash, 12)}
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                            <span className="text-xs text-gray-500">Blockchain Status</span>
-                            <span
-                                className={`text-xs font-medium ${
-                                    result.blockchain_status === "confirmed"
-                                        ? "text-emerald-400"
-                                        : "text-amber-400"
-                                }`}
-                            >
-                                {result.blockchain_status === "confirmed"
-                                    ? "✓ Confirmed"
-                                    : "⏳ Pending"}
-                            </span>
+                <Card aria-live="polite">
+                    <CardHeader
+                        title={result.status}
+                        action={
+                            <Badge tone={result.blockchain_status === "confirmed" ? "positive" : "warning"} dot>
+                                {result.blockchain_status === "confirmed" ? "Confirmed" : "Not on-chain"}
+                            </Badge>
+                        }
+                    />
+                    <dl className="space-y-2 text-xs">
+                        <div className="flex justify-between gap-4">
+                            <dt className="text-muted">Identity hash</dt>
+                            <dd className="font-mono text-fg-2">{truncateHash(result.identity_commitment_hash, 10)}</dd>
                         </div>
                         {result.blockchain_tx && (
-                            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                                <span className="text-xs text-gray-500">Transaction</span>
-                                <a
-                                    href={getEtherscanUrl(result.blockchain_tx)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-mono transition-colors"
-                                >
-                                    {truncateHash(result.blockchain_tx, 8)}
-                                    <ExternalLink className="w-3 h-3" />
-                                </a>
+                            <div className="flex justify-between gap-4">
+                                <dt className="text-muted">Transaction</dt>
+                                <dd>
+                                    <a
+                                        href={getEtherscanUrl(result.blockchain_tx)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 font-mono text-accent-text hover:underline"
+                                    >
+                                        {truncateHash(result.blockchain_tx, 8)}
+                                        <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                                        <span className="sr-only">(view on Etherscan)</span>
+                                    </a>
+                                </dd>
                             </div>
                         )}
-                    </div>
-
-                    {result.blockchain_warning && (
-                        <div className="mt-4 px-4 py-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                            <p className="text-xs text-amber-400">
-                                ⚠ {result.blockchain_warning}
-                            </p>
-                        </div>
-                    )}
+                    </dl>
+                    {result.blockchain_warning && <p className="mt-3 text-xs text-warning-text">{result.blockchain_warning}</p>}
                 </Card>
             )}
         </div>

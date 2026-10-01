@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import { CheckCircle, Loader2, XCircle, Wallet } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
 // Only states the client can actually observe. The backend runs pricing,
 // risk analysis, explanation and proof generation inside a single request,
@@ -68,26 +67,24 @@ export default function AnalysisProgress({
                 : "Analyzing portfolio";
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white/5 rounded-2xl border border-white/10 p-6 space-y-4"
+        <div
+            className="bg-surface rounded-xl border border-line p-5 sm:p-6 space-y-4"
             role="status"
             aria-live="polite"
         >
             <div className="flex items-center gap-3">
                 {currentStep === "done" ? (
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <CheckCircle className="w-5 h-5 text-positive-text" />
                 ) : currentStep === "error" ? (
-                    <XCircle className="w-5 h-5 text-red-400" />
+                    <XCircle className="w-5 h-5 text-negative-text" />
                 ) : currentStep === "wallet" ? (
-                    <Wallet className="w-5 h-5 text-blue-400 animate-pulse" />
+                    <Wallet className="w-5 h-5 text-accent animate-pulse" />
                 ) : (
-                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                    <Loader2 className="w-5 h-5 text-accent animate-spin" />
                 )}
-                <h3 className="text-sm font-semibold text-white">{title}</h3>
+                <h3 className="text-sm font-semibold text-fg">{title}</h3>
                 {isRunning && (
-                    <span className="ml-auto text-xs text-gray-400 tabular-nums">
+                    <span className="ml-auto text-xs text-muted tabular-nums">
                         {formatElapsed(elapsed)}
                     </span>
                 )}
@@ -95,22 +92,18 @@ export default function AnalysisProgress({
 
             {/* Indeterminate bar: we don't know real progress, so we don't fake a percentage */}
             {isRunning && (
-                <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden relative">
-                    <motion.div
-                        className="absolute top-0 h-full w-1/3 rounded-full bg-blue-500"
-                        animate={{ left: ["-33%", "100%"] }}
-                        transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
-                    />
+                <div className="h-1 rounded-full bg-surface-2 overflow-hidden relative">
+                    <div className="absolute top-0 h-full w-1/3 rounded-full bg-accent animate-[indeterminate_1.6s_ease-in-out_infinite]" />
                 </div>
             )}
 
             {currentStep === "server" && (
                 <div className="space-y-2">
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-muted">
                         The server is working through these steps. This usually takes under a
                         minute but can take longer when market data or the testnet is slow.
                     </p>
-                    <ul className="space-y-1 text-xs text-gray-300 list-disc pl-5">
+                    <ul className="space-y-1 text-xs text-fg-2 list-disc pl-5">
                         {serverTasks.map((task) => (
                             <li key={task}>{task}</li>
                         ))}
@@ -119,23 +112,17 @@ export default function AnalysisProgress({
             )}
 
             {currentStep === "wallet" && (
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-muted">
                     Analysis is ready. Confirm the transaction in your wallet to record the
                     snapshot hash on-chain. Rejecting it will cancel this analysis.
                 </p>
             )}
 
-            <AnimatePresence>
-                {error && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20"
-                    >
-                        <p className="text-xs text-red-400">{error}</p>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </motion.div>
+            {error && (
+                <div role="alert" className="px-4 py-3 rounded-lg bg-negative-soft">
+                    <p className="text-xs text-negative-text">{error}</p>
+                </div>
+            )}
+        </div>
     );
 }

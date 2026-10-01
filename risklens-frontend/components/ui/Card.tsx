@@ -1,22 +1,38 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { cn } from "@/lib/cn";
 
-interface CardProps {
-    children: React.ReactNode;
-    className?: string;
-    delay?: number;
+interface CardProps extends React.HTMLAttributes<HTMLElement> {
+    as?: "div" | "section" | "article";
+    padded?: boolean;
 }
 
-export default function Card({ children, className = "", delay = 0 }: CardProps) {
+export default function Card({ as: Tag = "section", padded = true, className, ...props }: CardProps) {
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay }}
-            whileHover={{ y: -4, transition: { duration: 0.2 } }}
-            className={`bg-white/[0.04] backdrop-blur-xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.1)] rounded-2xl p-6 transition-colors duration-300 hover:bg-white/[0.06] hover:border-white/20 ${className}`}
-        >
-            {children}
-        </motion.div>
+        <Tag
+            className={cn("bg-surface border border-line rounded-xl", padded && "p-5 sm:p-6", className)}
+            {...props}
+        />
+    );
+}
+
+export function CardHeader({
+    title,
+    description,
+    action,
+    className,
+}: {
+    title: React.ReactNode;
+    description?: React.ReactNode;
+    action?: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <div className={cn("flex items-start justify-between gap-4 mb-5", className)}>
+            <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-fg">{title}</h2>
+                {description && <p className="text-xs text-muted mt-1">{description}</p>}
+            </div>
+            {action && <div className="shrink-0">{action}</div>}
+        </div>
     );
 }

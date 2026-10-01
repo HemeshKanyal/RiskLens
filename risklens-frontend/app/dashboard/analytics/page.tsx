@@ -1,362 +1,124 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Card from "@/components/ui/Card";
-import { getPortfolioHistory, getDecisionLogs, runBacktest } from "@/lib/api";
+import Link from "next/link";
+import { Loader2, LineChart as LineChartIcon } from "lucide-react";
+import Card, { CardHeader } from "@/components/ui/Card";
+import PageHeader from "@/components/ui/PageHeader";
+import EmptyState from "@/components/ui/EmptyState";
+import Skeleton from "@/components/ui/Skeleton";
+import Button, { buttonStyles } from "@/components/ui/Button";
+import { Field, Select } from "@/components/ui/Field";
+import TrendChart from "@/components/analysis/TrendChart";
+import { snapshotValue } from "@/components/dashboard/RecentSnapshots";
+import { getPortfolioHistory, getDecisionLogs, runBacktest, extractError } from "@/lib/api";
+import { RISK_THRESHOLDS } from "@/lib/analysis";
 import type { PortfolioSnapshot, DecisionLog, BacktestResponse } from "@/lib/types";
-import { formatCurrency, formatDate, getRiskColor } from "@/lib/utils";
-import {
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    Tooltip,
-    ResponsiveContainer,
-    CartesianGrid,
-} from "recharts";
-import { BarChart3, TrendingUp, Loader2, Zap, ArrowRight, ShieldAlert } from "lucide-react";
-import toast from "react-hot-toast";
+import { formatCompactCurrency, formatCurrency, formatDate, formatPercent } from "@/lib/utils";
 
-export default function AnalyticsPage() {
-    const [portfolios, setPortfolios] = useState<PortfolioSnapshot[]>([]);
-    const [decisions, setDecisions] = useState<DecisionLog[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        async function loadData() {
-            try {
-                const [pRes, dRes] = await Promise.all([
-                    getPortfolioHistory(),
-                    getDecisionLogs(),
-                ]);
-                setPortfolios(pRes.portfolios);
-                setDecisions(dRes.decisions);
-            } catch (error) {
-                console.error("Failed to load analytics:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        loadData();
-    }, []);
-
-    // Portfolio value over time (reversed so oldest first)
-    const valueData = [...portfolios]
-        .reverse()
-        .map((p) => ({
-            date: formatDate(p.created_at),
-            value: p.assets.reduce((sum, a) => sum + (a.value || 0), 0),
-        }));
-
-    // Risk score over time
-    const riskData = [...decisions]
-        .filter((d) => d.action === "portfolio_analysis" && d.ai_analysis)
-        .reverse()
-        .map((d) => {
-            const risk = (d.ai_analysis as Record<string, unknown>)?.risk as Record<string, unknown> | undefined;
-            return {
-                date: formatDate(d.created_at),
-                score: (risk?.risk_score as number) || 0,
-                level: (risk?.risk_level as string) || "Unknown",
-            };
-        });
-
-    const hasData = portfolios.length > 0;
-
-    function CustomTooltipChart({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 shadow-[0_0_20px_rgba(0,0,0,0.5)] flex flex-col gap-1">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
-                    <p className="text-lg font-bold text-white tracking-tight">
-                        {typeof payload[0].value === "number" && payload[0].value > 10
-                            ? formatCurrency(payload[0].value)
-                            : `${payload[0].value}/5`}
-                    </p>
-                </div>
-            );
-        }
-        return null;
-    }
-
-    return (
-        <div className="max-w-5xl mx-auto space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                    Analytics
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Portfolio trends and risk history
-                </p>
-            </div>
-
-            {hasData && (
-                <StressTestPanel latestPortfolio={portfolios[0]} />
-            )}
-
-            {isLoading ? (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
-                </div>
-            ) : hasData ? (
-                <div className="grid grid-cols-1 gap-6">
-                    {/* Portfolio Value Chart */}
-                    {valueData.length > 1 && (
-                        <Card>
-                            <div className="flex items-center gap-3 mb-6">
-                                <TrendingUp className="w-5 h-5 text-blue-400" />
-                                <h2 className="text-sm font-semibold text-white">
-                                    Portfolio Value Over Time
-                                </h2>
-                            </div>
-                            <ResponsiveContainer width="100%" height={300} minWidth={0} minHeight={0}>
-                                <AreaChart data={valueData}>
-                                    <defs>
-                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4}/>
-                                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid
-                                        strokeDasharray="3 3"
-                                        stroke="rgba(255,255,255,0.04)"
-                                        vertical={false}
-                                    />
-                                    <XAxis
-                                        dataKey="date"
-                                        tick={{ fill: "#6B7280", fontSize: 11 }}
-                                        axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
-                                        tickLine={false}
-                                    />
-                                    <YAxis
-                                        tick={{ fill: "#6B7280", fontSize: 11 }}
-                                        axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
-                                        tickLine={false}
-                                        tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                                    />
-                                    <Tooltip content={<CustomTooltipChart />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="value"
-                                        stroke="#3B82F6"
-                                        strokeWidth={3}
-                                        fillOpacity={1}
-                                        fill="url(#colorValue)"
-                                        dot={{ fill: "#0B0F19", stroke: "#3B82F6", strokeWidth: 2, r: 4 }}
-                                        activeDot={{ r: 6, fill: "#3B82F6", stroke: "#fff", strokeWidth: 2 }}
-                                    />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </Card>
-                    )}
-
-                    {/* Risk Score Chart */}
-                    {riskData.length > 0 && (
-                        <Card>
-                            <div className="flex items-center gap-3 mb-6">
-                                <BarChart3 className="w-5 h-5 text-purple-400" />
-                                <h2 className="text-sm font-semibold text-white">
-                                    Risk Score History
-                                </h2>
-                            </div>
-                            {riskData.length > 1 ? (
-                                <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
-                                    <AreaChart data={riskData}>
-                                        <defs>
-                                            <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#A855F7" stopOpacity={0.4}/>
-                                                <stop offset="95%" stopColor="#A855F7" stopOpacity={0}/>
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid
-                                            strokeDasharray="3 3"
-                                            stroke="rgba(255,255,255,0.04)"
-                                            vertical={false}
-                                        />
-                                        <XAxis
-                                            dataKey="date"
-                                            tick={{ fill: "#6B7280", fontSize: 11 }}
-                                            axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
-                                            tickLine={false}
-                                        />
-                                        <YAxis
-                                            domain={[0, 5]}
-                                            tick={{ fill: "#6B7280", fontSize: 11 }}
-                                            axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
-                                            tickLine={false}
-                                        />
-                                        <Tooltip content={<CustomTooltipChart />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                                        <Area
-                                            type="monotone"
-                                            dataKey="score"
-                                            stroke="#A855F7"
-                                            strokeWidth={3}
-                                            fillOpacity={1}
-                                            fill="url(#colorRisk)"
-                                            dot={{ fill: "#0B0F19", stroke: "#A855F7", strokeWidth: 2, r: 4 }}
-                                            activeDot={{ r: 6, fill: "#A855F7", stroke: "#fff", strokeWidth: 2 }}
-                                        />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="space-y-3">
-                                    {riskData.map((d, i) => (
-                                        <div
-                                            key={i}
-                                            className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]"
-                                        >
-                                            <span className="text-sm text-gray-400">
-                                                {d.date}
-                                            </span>
-                                            <span
-                                                className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                                                style={{
-                                                    backgroundColor: `${getRiskColor(d.level)}15`,
-                                                    color: getRiskColor(d.level),
-                                                }}
-                                            >
-                                                {d.level} ({d.score}/5)
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </Card>
-                    )}
-
-                    {/* Summary Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Card>
-                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">
-                                Total Analyses
-                            </p>
-                            <p className="text-2xl font-semibold text-white">
-                                {decisions.filter((d) => d.action === "portfolio_analysis").length}
-                            </p>
-                        </Card>
-                        <Card>
-                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">
-                                On-Chain Verified
-                            </p>
-                            <p className="text-2xl font-semibold text-emerald-400">
-                                {decisions.filter((d) => d.blockchain_status === "confirmed").length}
-                            </p>
-                        </Card>
-                        <Card>
-                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">
-                                KYC Verifications
-                            </p>
-                            <p className="text-2xl font-semibold text-blue-400">
-                                {decisions.filter((d) => d.action === "kyc_verification").length}
-                            </p>
-                        </Card>
-                    </div>
-                </div>
-            ) : (
-                <Card>
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4">
-                            <BarChart3 className="w-7 h-7 text-gray-600" />
-                        </div>
-                        <p className="text-sm text-gray-500">No analytics data yet</p>
-                        <p className="text-xs text-gray-600 mt-1">
-                            Run portfolio analyses to build your analytics history
-                        </p>
-                    </div>
-                </Card>
-            )}
-        </div>
-    );
-}
-
-// ---------------------------------------------------------
-// Stress Testing Component
-// ---------------------------------------------------------
-
-const HISTORICAL_EVENTS = [
-    { id: "COVID_2020", name: "COVID-19 Crash (Mar 2020)" },
-    { id: "CRYPTO_WINTER_2022", name: "Crypto Winter (2022)" },
-    { id: "INFLATION_SHOCK_2021", name: "Inflation Shock (2021-2022)" },
-    { id: "TECH_BUBBLE_2000", name: "Dot-Com Crash (2000)" },
+// Must match STRESS_EVENTS in ai_phase2/backtest_engine.py
+const STRESS_EVENTS = [
+    { id: "COVID_2020", name: "COVID-19 crash", period: "Feb–May 2020" },
+    { id: "CRYPTO_WINTER_2022", name: "Rate hikes & crypto winter", period: "2022" },
+    { id: "BANKING_CRISIS_2008", name: "Global financial crisis", period: "Sep 2008–Mar 2009" },
 ];
 
-function StressTestPanel({ latestPortfolio }: { latestPortfolio: PortfolioSnapshot }) {
-    const [selectedEvent, setSelectedEvent] = useState("COVID_2020");
-    const [isTesting, setIsTesting] = useState(false);
-    const [result, setResult] = useState<BacktestResponse | null>(null);
+interface BacktestAnalysis {
+    event_name?: string;
+    period?: string;
+    context?: string;
+    error?: string;
+    portfolio_metrics?: { max_drawdown_pct?: number | null; total_return_pct?: number | null };
+    worst_performing_asset?: string | null;
+    worst_asset_drawdown?: number;
+    data_coverage?: string;
+}
 
-    const handleRunBacktest = async () => {
-        if (!latestPortfolio) return;
-        setIsTesting(true);
+function StressTest({ portfolio }: { portfolio: PortfolioSnapshot }) {
+    const [eventId, setEventId] = useState(STRESS_EVENTS[0].id);
+    const [isRunning, setIsRunning] = useState(false);
+    const [result, setResult] = useState<BacktestResponse | null>(null);
+    const [error, setError] = useState("");
+
+    const run = async () => {
+        setIsRunning(true);
         setResult(null);
+        setError("");
         try {
-            const data = await runBacktest({
-                assets: latestPortfolio.assets,
-                event_id: selectedEvent,
-            });
-            setResult(data);
-            toast.success("Stress test completed.");
-        } catch (error) {
-            console.error("Backtest failed:", error);
-            toast.error("Failed to run stress test.");
+            setResult(await runBacktest({ assets: portfolio.assets, event_id: eventId }));
+        } catch (err) {
+            setError(extractError(err));
         } finally {
-            setIsTesting(false);
+            setIsRunning(false);
         }
     };
 
+    const analysis = result?.analysis as BacktestAnalysis | undefined;
+    const m = analysis?.portfolio_metrics;
+
     return (
-        <Card className="mb-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/5 rounded-full blur-3xl -z-10 pointer-events-none translate-x-1/2 -translate-y-1/2" />
-
-            <div className="flex items-center gap-3 mb-5">
-                <ShieldAlert className="w-5 h-5 text-red-400" />
-                <h2 className="text-lg font-semibold text-white">
-                    Stress Test (Backtester)
-                </h2>
+        <Card>
+            <CardHeader
+                title="Stress test"
+                description={`Replays your latest holdings (${formatDate(portfolio.created_at)}) through a past market crisis, as if you'd held them unchanged.`}
+            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <Field label="Historical event" className="flex-1">
+                    <Select value={eventId} onChange={(e) => setEventId(e.target.value)} disabled={isRunning}>
+                        {STRESS_EVENTS.map((ev) => (
+                            <option key={ev.id} value={ev.id}>
+                                {ev.name} ({ev.period})
+                            </option>
+                        ))}
+                    </Select>
+                </Field>
+                <Button onClick={run} disabled={isRunning} className="h-10">
+                    {isRunning && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                    {isRunning ? "Running…" : "Run stress test"}
+                </Button>
             </div>
 
-            <p className="text-sm text-gray-400 mb-5">
-                See how your <strong className="text-white">current portfolio</strong> would have performed during historical crises.
-            </p>
+            {error && <p role="alert" className="mt-4 text-sm text-negative-text">{error}</p>}
 
-            <div className="flex flex-col sm:flex-row gap-3 items-center">
-                <select
-                    value={selectedEvent}
-                    onChange={(e) => setSelectedEvent(e.target.value)}
-                    className="flex-1 w-full px-4 py-2.5 rounded-xl bg-[#1A2236] border border-white/[0.08] text-sm text-gray-300 outline-none hover:border-white/[0.15] cursor-pointer"
-                >
-                    {HISTORICAL_EVENTS.map(ev => (
-                        <option key={ev.id} value={ev.id}>{ev.name}</option>
-                    ))}
-                </select>
-                <button
-                    onClick={handleRunBacktest}
-                    disabled={isTesting}
-                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-sm font-semibold text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                    {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                    Run Stress Test
-                </button>
-            </div>
+            {analysis?.error && <p className="mt-4 text-sm text-warning-text">{analysis.error}</p>}
 
-            {result && (
-                <div className="mt-6 p-5 rounded-2xl bg-[#1A2236] border border-red-500/10">
-                    <div className="flex items-center justify-between mb-3 border-b border-white/[0.04] pb-3">
-                        <h3 className="text-sm font-semibold text-white">Backtest Results</h3>
-                        <span className="text-xs text-red-400 font-mono">Event: {result.event_id}</span>
+            {analysis && !analysis.error && (
+                <div className="mt-6 pt-5 border-t border-line space-y-5" aria-live="polite">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div>
+                            <p className="text-xs text-muted">Worst peak-to-trough fall</p>
+                            <p className="mt-1 text-2xl font-semibold tracking-tight text-fg">
+                                {m?.max_drawdown_pct != null ? `${m.max_drawdown_pct.toFixed(1)}%` : "—"}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-muted">Change over the whole period</p>
+                            <p className="mt-1 text-2xl font-semibold tracking-tight text-fg">
+                                {m?.total_return_pct != null ? formatPercent(m.total_return_pct) : "—"}
+                            </p>
+                        </div>
+                        {analysis.worst_performing_asset && (
+                            <div>
+                                <p className="text-xs text-muted">Hardest hit</p>
+                                <p className="mt-1 text-2xl font-semibold tracking-tight text-fg">
+                                    {analysis.worst_performing_asset}
+                                    <span className="text-sm font-normal text-muted">
+                                        {" "}{analysis.worst_asset_drawdown?.toFixed(1)}%
+                                    </span>
+                                </p>
+                            </div>
+                        )}
                     </div>
-
-                    {result.analysis && (result.analysis.expected_impact as number) && (
-                        <div className="mb-4">
-                            <span className="text-2xl font-bold text-red-400">
-                                {result.analysis.expected_impact as number}%
-                            </span>
-                            <span className="text-xs text-gray-500 ml-2 uppercase">Estimated Drawdown</span>
+                    {analysis.context && <p className="text-sm text-fg-2">{analysis.context}</p>}
+                    {result?.llm_explanation && (
+                        <div>
+                            <p className="text-xs text-muted mb-1">Summary written by a language model. The figures above are computed.</p>
+                            <p className="text-sm text-fg-2 leading-relaxed whitespace-pre-wrap">{result.llm_explanation}</p>
                         </div>
                     )}
-
-                    <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
-                        {result.llm_explanation}
+                    <p className="text-xs text-muted">
+                        {analysis.data_coverage ? `${analysis.data_coverage}. ` : ""}
+                        Assets without price history for the period are left out. Past crises don&apos;t predict future ones.
                     </p>
                 </div>
             )}
@@ -364,4 +126,99 @@ function StressTestPanel({ latestPortfolio }: { latestPortfolio: PortfolioSnapsh
     );
 }
 
+export default function AnalyticsPage() {
+    const [portfolios, setPortfolios] = useState<PortfolioSnapshot[]>([]);
+    const [decisions, setDecisions] = useState<DecisionLog[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
 
+    useEffect(() => {
+        Promise.all([getPortfolioHistory(), getDecisionLogs()])
+            .then(([p, d]) => {
+                setPortfolios(p.portfolios);
+                setDecisions(d.decisions);
+            })
+            .catch((err) => setLoadError(extractError(err)))
+            .finally(() => setIsLoading(false));
+    }, []);
+
+    const valueData = [...portfolios].reverse().map((p) => ({ date: formatDate(p.created_at), value: snapshotValue(p) }));
+    const riskData = decisions
+        .filter((d) => d.action === "portfolio_analysis" && d.ai_analysis)
+        .reverse()
+        .map((d) => ({ date: formatDate(d.created_at), value: d.ai_analysis!.risk.risk_score }));
+
+    return (
+        <div className="max-w-5xl mx-auto space-y-6">
+            <PageHeader title="Trends & stress tests" description="How your saved analyses have changed, and how your holdings hold up in a crisis." />
+
+            {loadError && (
+                <p role="alert" className="px-4 py-3 rounded-lg bg-negative-soft text-sm text-negative-text">
+                    Couldn&apos;t load your data: {loadError}
+                </p>
+            )}
+
+            {isLoading ? (
+                <div className="space-y-4">
+                    <Skeleton className="h-40 rounded-xl" />
+                    <Skeleton className="h-72 rounded-xl" />
+                </div>
+            ) : portfolios.length === 0 ? (
+                !loadError && (
+                    <Card>
+                        <EmptyState
+                            icon={<LineChartIcon className="w-5 h-5" />}
+                            title="No analyses yet"
+                            description="Trends appear once you've saved a couple of analyses."
+                            action={<Link href="/dashboard/portfolio" className={buttonStyles()}>Run an analysis</Link>}
+                        />
+                    </Card>
+                )
+            ) : (
+                <>
+                    <StressTest portfolio={portfolios[0]} />
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        <Card>
+                            <CardHeader
+                                title="Risk score at each analysis"
+                                description="0 to 5. Lines mark the Moderate and High bands."
+                            />
+                            {riskData.length > 1 ? (
+                                <TrendChart
+                                    data={riskData}
+                                    yDomain={[0, 5]}
+                                    yTicks={[0, 1, 2, 3, 4, 5]}
+                                    format={(v) => `${v.toFixed(2)} / 5`}
+                                    references={[
+                                        { y: RISK_THRESHOLDS.moderate, label: "Moderate" },
+                                        { y: RISK_THRESHOLDS.high, label: "High" },
+                                    ]}
+                                    ariaLabel={`Risk score over ${riskData.length} analyses, latest ${riskData.at(-1)?.value.toFixed(2)}`}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted">Run another analysis to see a trend.</p>
+                            )}
+                        </Card>
+                        <Card>
+                            <CardHeader
+                                title="Value entered at each analysis"
+                                description="The holdings you entered each time. Not live performance tracking."
+                            />
+                            {valueData.length > 1 ? (
+                                <TrendChart
+                                    data={valueData}
+                                    format={formatCurrency}
+                                    yTickFormat={formatCompactCurrency}
+                                    ariaLabel={`Portfolio value over ${valueData.length} analyses, latest ${formatCurrency(valueData.at(-1)!.value)}`}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted">Run another analysis to see a trend.</p>
+                            )}
+                        </Card>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}

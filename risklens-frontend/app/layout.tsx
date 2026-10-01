@@ -1,5 +1,6 @@
 import "./globals.css";
-import { Inter, Outfit } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { WalletProvider } from "@/lib/wallet-context";
@@ -9,53 +10,41 @@ const inter = Inter({
     variable: "--font-inter",
 });
 
-const outfit = Outfit({
-    subsets: ["latin"],
-    variable: "--font-outfit",
-});
-
-export const metadata = {
-    title: "RiskLens",
+export const metadata: Metadata = {
+    title: { default: "RiskLens", template: "%s · RiskLens" },
     description: "Portfolio risk and diversification analysis with on-chain snapshot timestamps",
 };
 
-export default function RootLayout({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
+export const viewport: Viewport = {
+    themeColor: [
+        { media: "(prefers-color-scheme: light)", color: "#f6f6f4" },
+        { media: "(prefers-color-scheme: dark)", color: "#0e0e0d" },
+    ],
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
-            <body className="bg-[#0B0F19] text-white font-sans">
+        <html lang="en" className={inter.variable}>
+            <body>
                 <AuthProvider>
                     <WalletProvider>
-                    {children}
-                    <Toaster
-                        position="top-right"
-                        toastOptions={{
-                            duration: 4000,
-                            style: {
-                                background: "rgba(26, 34, 54, 0.8)",
-                                backdropFilter: "blur(12px)",
-                                color: "#fff",
-                                border: "1px solid rgba(255,255,255,0.08)",
-                                borderRadius: "12px",
-                                fontSize: "14px",
-                            },
-                            success: {
-                                iconTheme: {
-                                    primary: "#10B981",
-                                    secondary: "#fff",
+                        {children}
+                        <Toaster
+                            position="top-right"
+                            toastOptions={{
+                                duration: 4000,
+                                style: {
+                                    background: "var(--surface)",
+                                    color: "var(--fg)",
+                                    border: "1px solid var(--line-strong)",
+                                    borderRadius: "10px",
+                                    fontSize: "14px",
+                                    boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
                                 },
-                            },
-                            error: {
-                                iconTheme: {
-                                    primary: "#EF4444",
-                                    secondary: "#fff",
-                                },
-                            },
-                        }}
-                    />
+                                success: { iconTheme: { primary: "var(--positive)", secondary: "var(--surface)" } },
+                                error: { iconTheme: { primary: "var(--negative)", secondary: "var(--surface)" } },
+                            }}
+                        />
                     </WalletProvider>
                 </AuthProvider>
             </body>

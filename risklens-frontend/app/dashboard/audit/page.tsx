@@ -1,145 +1,136 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Card from "@/components/ui/Card";
-import { getDecisionAudit } from "@/lib/api";
-import type { AuditResponse, AuditEntry } from "@/lib/types";
-import { Loader2, Activity, Target, ShieldAlert, Cpu } from "lucide-react";
+import Link from "next/link";
+import { Activity } from "lucide-react";
+import Card, { CardHeader } from "@/components/ui/Card";
+import Badge, { type Tone } from "@/components/ui/Badge";
+import PageHeader from "@/components/ui/PageHeader";
+import Stat from "@/components/ui/Stat";
+import EmptyState from "@/components/ui/EmptyState";
+import { buttonStyles } from "@/components/ui/Button";
+import { getDecisionAudit, extractError } from "@/lib/api";
+import type { AuditResponse } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
+
+const ACTION_LABEL: Record<string, { label: string; tone: Tone }> = {
+    accept: { label: "Followed", tone: "positive" },
+    modify: { label: "Partly", tone: "accent" },
+    reject: { label: "Declined", tone: "negative" },
+    ignore: { label: "Ignored", tone: "neutral" },
+    no_response: { label: "No response", tone: "neutral" },
+};
 
 export default function AuditPage() {
     const [audit, setAudit] = useState<AuditResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
 
     useEffect(() => {
-        async function loadAudit() {
-            try {
-                const data = await getDecisionAudit();
-                setAudit(data);
-            } catch (error) {
-                console.error("Failed to load audit:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        loadAudit();
+        getDecisionAudit()
+            .then(setAudit)
+            .catch((err) => setLoadError(extractError(err)))
+            .finally(() => setIsLoading(false));
     }, []);
+
+    const vol = audit?.volatility_patterns;
+    const isEmpty = !isLoading && !loadError && (!audit || audit.total_decisions === 0);
 
     return (
         <div className="max-w-5xl mx-auto space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                    Behavioral Audit
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Track your decision-making patterns and portfolio drift over time.
-                </p>
-            </div>
+            <PageHeader
+                title="Decision patterns"
+                description="How you've responded to suggestions. This only tailors future explanations; it never changes a risk score."
+            />
 
-            {isLoading ? (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-                </div>
-            ) : !audit ? (
+            {loadError && (
+                <p role="alert" className="px-4 py-3 rounded-lg bg-negative-soft text-sm text-negative-text">
+                    Couldn&apos;t load your decisions: {loadError}
+                </p>
+            )}
+
+            {isEmpty ? (
                 <Card>
-                    <div className="py-16 text-center">
-                        <Cpu className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-                        <p className="text-sm text-gray-500">No behavioral data available yet.</p>
-                        <p className="text-xs text-gray-600 mt-2">Interact with AI rebalancing suggestions to build your profile.</p>
-                    </div>
+                    <EmptyState
+                        icon={<Activity className="w-5 h-5" />}
+                        title="No decisions recorded yet"
+                        description="After an analysis, tell us whether you'll act on its suggestions. Patterns show up here."
+                        action={<Link href="/dashboard/portfolio" className={buttonStyles()}>Run an analysis</Link>}
+                    />
                 </Card>
             ) : (
-                <div className="space-y-6">
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <Card className="px-5 py-4">
-                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Decisions</p>
-                            <p className="text-2xl font-semibold text-white">{audit.total_decisions}</p>
-                        </Card>
-                        <Card className="px-5 py-4">
-                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Response Rate</p>
-                            <p className="text-2xl font-semibold text-indigo-400">
-                                {(audit.response_rate || 0).toFixed(1)}%
-                            </p>
-                        </Card>
-                        <Card className="px-5 py-4">
-                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Accept Rate</p>
-                            <p className="text-2xl font-semibold text-emerald-400">
-                                {(audit.accept_rate || 0).toFixed(1)}%
-                            </p>
-                        </Card>
-                        <Card className="px-5 py-4">
-                            <p className="text-xs text-amber-500/80 uppercase tracking-wider mb-1 flex items-center justify-between">
-                                Panic Sell Prob. <ShieldAlert className="w-3 h-3 text-amber-500" />
-                            </p>
-                            <p className="text-2xl font-semibold text-amber-400">
-                                {audit.volatility_patterns?.panic_sell_probability !== undefined 
-                                    ? audit.volatility_patterns.panic_sell_probability.toFixed(1) + "%" 
-                                    : "0.0%"}
-                            </p>
-                        </Card>
+                <>
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        <Stat label="Analyses" isLoading={isLoading} value={audit?.total_decisions ?? "—"} />
+                        <Stat
+                            label="You responded to"
+                            isLoading={isLoading}
+                            value={audit ? `${Math.round(audit.response_rate)}%` : "—"}
+                            hint="of analyses"
+                        />
+                        <Stat
+                            label="You followed"
+                            isLoading={isLoading}
+                            value={audit ? `${Math.round(audit.accept_rate)}%` : "—"}
+                            hint="of suggestions you responded to"
+                        />
+                        <Stat
+                            label="Declined in volatile markets"
+                            isLoading={isLoading}
+                            value={vol && vol.high_vol_total > 0 ? `${vol.high_vol_rejects} of ${vol.high_vol_total}` : "—"}
+                            hint="when volatility was above 30%"
+                        />
                     </div>
 
-                    {/* Drifts */}
-                    {audit.drifts && audit.drifts.length > 0 && (
+                    {audit && audit.drifts.length > 0 && (
                         <Card>
-                            <div className="flex items-center gap-3 mb-4">
-                                <Activity className="w-5 h-5 text-rose-400" />
-                                <h2 className="text-sm font-semibold text-white">
-                                    Behavioral Drift Detected
-                                </h2>
-                            </div>
+                            <CardHeader title="Patterns noticed" />
                             <ul className="space-y-2">
-                                {audit.drifts.map((drift, i) => (
-                                    <li key={i} className="flex gap-2 text-sm text-gray-300 bg-rose-500/5 border border-rose-500/10 px-4 py-2.5 rounded-lg">
-                                        <span className="text-rose-400 mt-0.5">•</span> {drift}
+                                {audit.drifts.map((d, i) => (
+                                    <li key={i} className="text-sm text-fg-2 flex gap-2">
+                                        <span className="text-muted" aria-hidden="true">→</span>
+                                        {d}
                                     </li>
                                 ))}
                             </ul>
                         </Card>
                     )}
 
-                    {/* Timeline */}
-                    <Card>
-                        <div className="flex items-center gap-3 mb-6">
-                            <Target className="w-5 h-5 text-indigo-400" />
-                            <h2 className="text-sm font-semibold text-white">
-                                Decision Log
-                            </h2>
-                        </div>
-                        <div className="space-y-3">
-                            {audit.audit_trail.map((entry: AuditEntry, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                entry.user_action === "accept" ? "bg-green-500/20 text-green-400" :
-                                                entry.user_action === "reject" ? "bg-red-500/20 text-red-500" :
-                                                "bg-gray-500/20 text-gray-400"
-                                            }`}>
-                                                {entry.user_action}
-                                            </span>
-                                            <span className="text-xs text-gray-500 font-mono">
-                                                {formatDate(entry.timestamp)}
-                                            </span>
-                                        </div>
-                                        <div className="text-sm text-gray-400 mt-1 flex gap-4">
-                                            <span>Risk at time: <strong className="text-gray-300">{entry.ai_risk_score}</strong></span>
-                                            {entry.market_volatility && (
-                                                <span>Volatility: {entry.market_volatility.toFixed(1)}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-xs text-gray-500 font-mono">
-                                            {entry.snapshot_hash.slice(0, 8)}...
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                </div>
+                    {audit && audit.audit_trail.length > 0 && (
+                        <Card padded={false}>
+                            <div className="px-5 pt-5 sm:px-6 sm:pt-6">
+                                <CardHeader title="Decision log" className="mb-3" />
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-xs text-muted border-y border-line">
+                                            <th scope="col" className="py-2 pl-5 sm:pl-6 pr-3 font-medium">Date</th>
+                                            <th scope="col" className="py-2 pr-3 font-medium">Your response</th>
+                                            <th scope="col" className="py-2 pr-6 font-medium text-right">Risk score</th>
+                                            <th scope="col" className="py-2 pr-5 sm:pr-6 font-medium hidden sm:table-cell">Reason given</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {audit.audit_trail.map((e, i) => {
+                                            const a = ACTION_LABEL[e.user_action] ?? { label: e.user_action, tone: "neutral" as Tone };
+                                            return (
+                                                <tr key={i} className="border-b border-line last:border-0">
+                                                    <td className="py-3 pl-5 sm:pl-6 pr-3 text-fg whitespace-nowrap">{formatDate(e.timestamp)}</td>
+                                                    <td className="py-3 pr-3"><Badge tone={a.tone}>{a.label}</Badge></td>
+                                                    <td className="py-3 pr-6 text-right tabular-nums text-fg-2">
+                                                        {e.ai_risk_score != null ? e.ai_risk_score.toFixed(2) : "—"}
+                                                    </td>
+                                                    <td className="py-3 pr-5 sm:pr-6 text-fg-2 hidden sm:table-cell">{e.user_reasoning || "—"}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </Card>
+                    )}
+                </>
             )}
         </div>
     );

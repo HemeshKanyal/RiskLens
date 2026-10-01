@@ -56,44 +56,75 @@ export interface PortfolioSnapshot {
 
 // --- Analysis Response ---
 
+export type RiskLevel = "Low" | "Moderate" | "High";
+
 export interface RiskInfo {
   risk_score: number;
-  risk_level: "Low" | "Moderate" | "High";
-  scale: { min: number; max: number; thresholds: Record<string, number> };
-  phase1_score: number;
-  phase2_score: number;
-  phase1_weight: number;
-  phase2_weight: number;
+  risk_level: RiskLevel;
+  scale?: { min: number; max: number; thresholds: Record<string, number> };
+  // Absent when market data was unavailable and only the allocation model ran
+  phase1_score?: number;
+  phase2_score?: number;
+  phase1_weight?: number;
+  phase2_weight?: number;
   explanation: string;
 }
 
+export interface Insight {
+  category?: string;
+  severity?: "info" | "warning" | "critical";
+  message: string;
+  symbol?: string;
+}
+
+export interface AssetMarketMetrics {
+  volatility_pct?: number;
+  vol_classification?: string;
+  max_drawdown_pct?: number;
+  sharpe_ratio?: number;
+}
+
 export interface Phase2Data {
-  per_asset_metrics: Record<string, Record<string, number>>;
+  per_asset_metrics: Record<string, AssetMarketMetrics>;
   correlation_matrix: Record<string, Record<string, number>>;
   portfolio_intelligence: {
     portfolio_volatility_pct: number;
     diversification_ratio: number;
     risk_contributions: Record<string, number>;
-    [key: string]: unknown;
+    high_correlation_pairs?: [string, string, number][];
   };
   insights: {
     summary: string;
-    portfolio_insights: string[];
-    [key: string]: unknown;
+    portfolio_insights: Insight[];
+    asset_insights?: Insight[];
   };
   market_risk_score: number;
 }
 
-export interface AnalysisResponse {
-  ai_analysis: {
-    summary: Record<string, unknown>;
-    diversification: Record<string, unknown>;
-    rebalancing: Record<string, unknown>;
-    phase1_risk?: Record<string, unknown>;
-    phase2?: Phase2Data;
-    risk: RiskInfo;
-    [key: string]: unknown;
+/** The `ai_analysis` object produced by the backend engine. */
+export interface RawAnalysis {
+  summary?: {
+    total_value: number;
+    asset_allocations_percent: Record<string, number>;
+    class_allocations_percent: Record<string, number>;
   };
+  diversification?: {
+    hhi: number;
+    diversification_level: string;
+    score: number;
+    explanation?: string;
+  };
+  rebalancing?: {
+    profile_used?: string;
+    suggestions?: string[];
+    explanation?: string;
+  };
+  phase2?: Phase2Data | null;
+  risk: RiskInfo;
+}
+
+export interface AnalysisResponse {
+  ai_analysis: RawAnalysis;
   llm_explanation: string;
   snapshot_hash: string;
   claim_hash: string;
@@ -132,7 +163,7 @@ export interface DecisionLog {
   action: "portfolio_analysis" | "kyc_verification";
   snapshot_hash?: string;
   claim_hash?: string;
-  ai_analysis?: Record<string, unknown>;
+  ai_analysis?: RawAnalysis;
   llm_explanation?: string;
   identity_commitment_hash?: string;
   blockchain_tx: string | null;
@@ -152,23 +183,6 @@ export interface ScreenshotResult {
   assets: Asset[];
   confidence: "high" | "medium" | "low" | "none";
   notes: string;
-}
-
-// --- Market Risk ---
-
-export interface AssetMetrics {
-  symbol: string;
-  metrics: Record<string, number>;
-  price_history: { date: string; close: number }[];
-  data_points: number;
-}
-
-export interface QuickRiskResult {
-  portfolio_volatility: number;
-  diversification_ratio: number;
-  risk_contributions: Record<string, number>;
-  summary: string;
-  top_insights: string[];
 }
 
 // ==============================
