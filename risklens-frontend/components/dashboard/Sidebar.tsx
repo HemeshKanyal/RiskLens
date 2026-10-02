@@ -10,7 +10,6 @@ import Logo from "@/components/ui/Logo";
 import { cn } from "@/lib/cn";
 
 const NAV = [APP_CHAPTERS.overview, APP_CHAPTERS.analysis, APP_CHAPTERS.trends, APP_CHAPTERS.history, APP_CHAPTERS.patterns];
-const ACCOUNT_NAV = [APP_CHAPTERS.identity, APP_CHAPTERS.settings];
 
 function NavLink({
     href,
@@ -52,6 +51,8 @@ function NavLink({
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
     const pathname = usePathname();
     const { user, logout } = useAuth();
+    // The identity check is a one-time step: once done it lives in Settings
+    const accountNav = user?.kyc_verified ? [APP_CHAPTERS.settings] : [APP_CHAPTERS.settings, APP_CHAPTERS.identity];
 
     const isActive = (href: string) =>
         href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -105,7 +106,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                     </div>
                     <div>
                         <p className="px-4 pb-2 font-fell italic text-sm text-muted">Il tuo conto</p>
-                        {ACCOUNT_NAV.map((item) => (
+                        {accountNav.map((item) => (
                             <NavLink key={item.href} {...item} active={isActive(item.href)} onNavigate={onClose} />
                         ))}
                     </div>

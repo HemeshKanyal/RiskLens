@@ -5,6 +5,6 @@ export const APP_CHAPTERS = {
     trends: { numeral: "III", caption: "Tendenze e prove", href: "/dashboard/analytics", label: "Trends & stress tests" },
     history: { numeral: "IV", caption: "L'archivio", href: "/dashboard/history", label: "History" },
     patterns: { numeral: "V", caption: "Le abitudini", href: "/dashboard/audit", label: "Decision patterns" },
-    identity: { numeral: "VI", caption: "Il sigillo", href: "/dashboard/kyc", label: "Identity check" },
-    settings: { numeral: "VII", caption: "Le impostazioni", href: "/dashboard/settings", label: "Settings" },
+    identity: { numeral: "VII", caption: "Il sigillo", href: "/dashboard/kyc", label: "Identity check" },
+    settings: { numeral: "VI", caption: "Le impostazioni", href: "/dashboard/settings", label: "Settings" },
 } as const;

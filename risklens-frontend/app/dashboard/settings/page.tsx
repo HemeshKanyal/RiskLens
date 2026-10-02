@@ -5,7 +5,9 @@ import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
 import { APP_CHAPTERS } from "@/lib/chapters";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { formatDate } from "@/lib/utils";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
     return (
@@ -36,9 +38,21 @@ export default function SettingsPage() {
                         </Badge>
                     </Row>
                     <Row label="Identity check">
-                        <Badge tone={user?.kyc_verified ? "positive" : "neutral"} dot>
-                            {user?.kyc_verified ? "Verified" : "Not done"}
-                        </Badge>
+                        {user?.kyc_verified ? (
+                            <span className="inline-flex items-center gap-2">
+                                <Badge tone="positive" dot>Done</Badge>
+                                {user.kyc_verified_at && (
+                                    <span className="text-xs text-muted">{formatDate(user.kyc_verified_at)}</span>
+                                )}
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-3">
+                                <Badge dot>Not done</Badge>
+                                <Link href={APP_CHAPTERS.identity.href} className="text-xs font-medium text-accent-text hover:underline">
+                                    Do it now
+                                </Link>
+                            </span>
+                        )}
                     </Row>
                 </dl>
             </Card>

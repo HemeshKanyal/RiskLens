@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, Loader2, Lock } from "lucide-react";
 import Card, { CardHeader } from "@/components/ui/Card";
-import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import PageHeader from "@/components/ui/PageHeader";
 import { APP_CHAPTERS } from "@/lib/chapters";
@@ -45,6 +45,8 @@ export default function KYCPage() {
     const [phase, setPhase] = useState<Phase>("idle");
     const [result, setResult] = useState<KYCResponse | null>(null);
     const isBusy = phase !== "idle";
+    // Done before this visit: a just-finished check still shows its result below
+    const alreadyDone = !!user?.kyc_verified && !result && phase === "idle";
 
     // Same checks as the circuit, so most mistakes are caught before proving
     const validate = (): Errors => {
@@ -109,54 +111,67 @@ export default function KYCPage() {
                 </div>
             </div>
 
-            {user?.kyc_verified && !result && (
-                <p className="text-sm text-fg-2 flex flex-wrap items-center gap-2">
-                    <Badge tone="positive" dot>Verified</Badge>
-                    {user.kyc_verified_at ? `on ${formatDate(user.kyc_verified_at)}. ` : ""}
-                    Submitting again replaces it.
-                </p>
+            {alreadyDone ? (
+                <Card>
+                    <CardHeader
+                        title={
+                            <span className="inline-flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-positive-text" aria-hidden="true" />
+                                Your identity check is done
+                            </span>
+                        }
+                        description={
+                            user?.kyc_verified_at
+                                ? `Verified on ${formatDate(user.kyc_verified_at)}. You don't need to do it again.`
+                                : "You don't need to do it again."
+                        }
+                    />
+                    <Link href={APP_CHAPTERS.settings.href} className="text-sm font-medium text-accent-text hover:underline">
+                        See it in Settings
+                    </Link>
+                </Card>
+            ) : (
+                <Card>
+                    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field label="Full legal name" error={errors.name}>
+                                <Input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={isBusy} />
+                            </Field>
+                            <Field label="Date of birth" error={errors.dob}>
+                                <Input type="date" autoComplete="bday" value={dob} onChange={(e) => setDob(e.target.value)} disabled={isBusy} />
+                            </Field>
+                            <Field label="Country code" hint="Numeric, 1–255. Codes 1–3 are a demo restricted list." error={errors.country}>
+                                <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={1}
+                                    max={255}
+                                    value={countryCode}
+                                    onChange={(e) => setCountryCode(e.target.value)}
+                                    disabled={isBusy}
+                                />
+                            </Field>
+                            <Field label="Document number" hint="Passport or national ID" error={errors.doc}>
+                                <Input value={documentId} onChange={(e) => setDocumentId(e.target.value)} disabled={isBusy} autoComplete="off" />
+                            </Field>
+                        </div>
+
+                        {errors.form && (
+                            <p role="alert" className="text-sm text-negative-text">{errors.form}</p>
+                        )}
+
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
+                            <p className="text-xs text-muted" aria-live="polite">
+                                {isBusy ? PHASE_LABEL[phase as Exclude<Phase, "idle">] : "Takes a few seconds the first time while the prover loads."}
+                            </p>
+                            <Button type="submit" disabled={isBusy}>
+                                {isBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                                {isBusy ? "Working…" : "Create proof"}
+                            </Button>
+                        </div>
+                    </form>
+                </Card>
             )}
-
-            <Card>
-                <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Full legal name" error={errors.name}>
-                            <Input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={isBusy} />
-                        </Field>
-                        <Field label="Date of birth" error={errors.dob}>
-                            <Input type="date" autoComplete="bday" value={dob} onChange={(e) => setDob(e.target.value)} disabled={isBusy} />
-                        </Field>
-                        <Field label="Country code" hint="Numeric, 1–255. Codes 1–3 are a demo restricted list." error={errors.country}>
-                            <Input
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                max={255}
-                                value={countryCode}
-                                onChange={(e) => setCountryCode(e.target.value)}
-                                disabled={isBusy}
-                            />
-                        </Field>
-                        <Field label="Document number" hint="Passport or national ID" error={errors.doc}>
-                            <Input value={documentId} onChange={(e) => setDocumentId(e.target.value)} disabled={isBusy} autoComplete="off" />
-                        </Field>
-                    </div>
-
-                    {errors.form && (
-                        <p role="alert" className="text-sm text-negative-text">{errors.form}</p>
-                    )}
-
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
-                        <p className="text-xs text-muted" aria-live="polite">
-                            {isBusy ? PHASE_LABEL[phase as Exclude<Phase, "idle">] : "Takes a few seconds the first time while the prover loads."}
-                        </p>
-                        <Button type="submit" disabled={isBusy}>
-                            {isBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-                            {isBusy ? "Working…" : "Create proof"}
-                        </Button>
-                    </div>
-                </form>
-            </Card>
 
             {result && (
                 <Card aria-live="polite">
