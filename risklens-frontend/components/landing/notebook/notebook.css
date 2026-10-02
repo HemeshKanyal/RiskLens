@@ -1,0 +1,318 @@
+/* Landing page only: the Da Vinci notebook (hero, chapters, nav, footer). */
+
+/* ==============================
+ * Landing: the notebook hero
+ * A fixed art palette (it's a drawing, so it doesn't follow dark mode).
+ * Timeline: construction lines draw on night ink (0–1.4s), the parchment
+ * fades in (1.2–2.1s), then the studies appear one after another.
+ * ============================== */
+
+.nb {
+  --nb-night: #15110c;
+  --nb-paper: #efe3c8;
+  --nb-ink: #2b2118;
+  --nb-sepia: #6e5235;
+  --nb-line: #b0925f;
+  --nb-chalk: #a4442c;
+  position: relative;
+  height: 100svh;
+  min-height: 600px;
+  overflow: hidden;
+  background: var(--nb-night);
+  color: var(--nb-ink);
+}
+
+.nb-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.nb-layer {
+  position: absolute;
+  inset: -4%;
+  transform: translate3d(
+    calc(var(--px, 0) * var(--depth, 0) * -26px),
+    calc(var(--py, 0) * var(--depth, 0) * -18px),
+    0
+  );
+  will-change: transform;
+  pointer-events: none;
+}
+.nb-layer > svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Aged paper: warm gradient, fibres and a vignette */
+.nb-paper {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(80, 52, 20, 0.28) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.24 0 0 0 0 0.12 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 18% 22%, rgba(164, 120, 60, 0.12), transparent 30%),
+    radial-gradient(circle at 82% 78%, rgba(164, 120, 60, 0.14), transparent 35%),
+    var(--nb-paper);
+  opacity: 0;
+  animation: nb-fade 0.9s ease 1.2s forwards;
+}
+
+/* Construction lines draw themselves (pathLength=1 on each path) */
+.nb-construction path,
+.nb-construction circle {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0.55;
+  animation: nb-draw 1.3s cubic-bezier(0.6, 0, 0.3, 1) forwards;
+}
+
+.nb-reveal { opacity: 0; animation: nb-fade 1s ease 1.6s forwards; }
+.nb-reveal-2 { animation-delay: 1.85s; }
+.nb-reveal-3 { animation-delay: 2.1s; }
+.nb-reveal-4 { animation-delay: 2.4s; }
+
+.nb-spin-slow { transform-box: view-box; transform-origin: 800px 450px; animation: nb-spin 240s linear infinite; }
+.nb-spin-rev { transform-box: view-box; transform-origin: 800px 450px; animation: nb-spin 160s linear infinite reverse; }
+.nb-alidade { transform-box: view-box; transform-origin: 800px 450px; transform: rotate(-24deg); }
+
+.nb-float > svg { animation: nb-bob 6s ease-in-out infinite; }
+
+/* Annotation typography inside the SVGs */
+.nb-note { font-family: var(--font-fell), serif; font-style: italic; font-size: 22px; fill: var(--nb-ink); }
+.nb-note-sm { font-family: var(--font-fell), serif; font-style: italic; font-size: 16px; fill: var(--nb-sepia); }
+.nb-chalk-text { fill: var(--nb-chalk); }
+.nb-numeral { font-family: var(--font-serif), serif; font-size: 22px; fill: var(--nb-sepia); }
+.nb-mirror { transform-box: fill-box; transform-origin: center; transform: scaleX(-1); }
+.nb-phone-label { font-family: var(--font-inter), sans-serif; font-size: 11px; fill: #9fb3cf; }
+.nb-phone-score { font-family: var(--font-inter), sans-serif; font-size: 40px; font-weight: 600; fill: #fff; letter-spacing: -1px; }
+.nb-phone-cta { font-family: var(--font-inter), sans-serif; font-size: 13px; font-weight: 600; fill: #fff; }
+
+/* Cover box: same geometry as an SVG with viewBox 1600×900 and "slice" */
+.nb-cover {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 100svh * 16 / 9);
+  aspect-ratio: 16 / 9;
+  transform: translate(-50%, -50%);
+  container-type: inline-size;
+}
+
+/* The title frame sits at (650, 255) 300×390 in drawing units */
+.nb-frame {
+  position: absolute;
+  left: 40.625%;
+  top: 28.333%;
+  width: 18.75%;
+  height: 43.333%;
+  padding: 1.2cqw 1.1cqw;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid currentColor;
+  color: var(--nb-paper);
+  background: color-mix(in srgb, var(--nb-paper) 0%, transparent);
+  animation: nb-frame-ink 0.9s ease 1.2s forwards;
+}
+.nb-title {
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 700;
+  font-size: 3.1cqw;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+.nb-title em {
+  font-family: var(--font-serif), serif;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.01em;
+}
+.nb-tagline {
+  margin-top: 0.8cqw;
+  font-family: var(--font-serif), serif;
+  font-size: 1.15cqw;
+  line-height: 1.15;
+  opacity: 0.85;
+}
+.nb-index {
+  margin-top: auto;
+}
+.nb-index li a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6cqw;
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 1.05cqw;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+.nb-index li a:hover span:first-child { text-decoration: underline; text-underline-offset: 3px; }
+.nb-index-n { font-family: var(--font-serif), serif; font-weight: 400; opacity: 0.7; }
+.nb-cta {
+  margin-top: 1cqw;
+  display: block;
+  text-align: center;
+  padding: 0.55cqw 0.8cqw;
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 0.95cqw;
+  color: var(--nb-paper);
+  background: var(--nb-ink);
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+.nb-cta:hover { background: var(--nb-chalk); }
+
+@keyframes nb-draw { to { stroke-dashoffset: 0; } }
+@keyframes nb-fade { to { opacity: 1; } }
+@keyframes nb-spin { to { transform: rotate(360deg); } }
+@keyframes nb-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes nb-frame-ink { to { color: var(--nb-ink); background: color-mix(in srgb, var(--nb-paper) 72%, transparent); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-paper, .nb-reveal { opacity: 1; animation: none; }
+  .nb-construction path, .nb-construction circle { stroke-dashoffset: 0; animation: none; }
+  .nb-frame { animation: none; color: var(--nb-ink); background: color-mix(in srgb, var(--nb-paper) 72%, transparent); }
+  .nb-spin-slow, .nb-spin-rev, .nb-float > svg { animation: none; }
+}
+
+/* Landing nav over the notebook: ink text, appears with the parchment */
+.nb-nav { color: #2b2118; }
+.nb-nav-solid {
+  background: rgba(239, 227, 200, 0.88);
+  backdrop-filter: blur(10px);
+  border-color: rgba(110, 82, 53, 0.25);
+}
+.nb-nav-intro { opacity: 0; animation: nb-fade 0.6s ease 1.5s forwards; }
+.nb-nav a[aria-label="RiskLens home"] { color: #2b2118; }
+@media (prefers-reduced-motion: reduce) {
+  .nb-nav-intro { opacity: 1; animation: none; }
+}
+.nb-seal { font-family: var(--font-serif), serif; font-style: italic; font-size: 24px; fill: #f3d9c8; }
+
+/* ==============================
+ * Landing: the notebook chapters
+ * ============================== */
+
+.nb-book {
+  --nb-paper: #efe3c8;
+  --nb-ink: #2b2118;
+  --nb-sepia: #6e5235;
+  --nb-line: #b0925f;
+  --nb-chalk: #a4442c;
+  color: var(--nb-ink);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.24 0 0 0 0 0.12 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    var(--nb-paper);
+  border-top: 1px solid rgba(110, 82, 53, 0.35);
+  overflow-x: clip; /* parallax layers drift slightly past their plates */
+}
+
+.nb-chapter {
+  min-height: 92svh;
+  display: flex;
+  align-items: center;
+  padding: 6rem 1rem;
+  border-bottom: 1px solid rgba(110, 82, 53, 0.25);
+  scroll-margin-top: 3.5rem;
+}
+.nb-chapter-grid {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 2.5rem;
+  align-items: center;
+}
+@media (min-width: 900px) {
+  .nb-chapter-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 4rem; }
+  .nb-flip .nb-chapter-text { order: 2; }
+}
+
+.nb-chapter-n {
+  font-family: var(--font-fell), serif;
+  font-style: italic;
+  font-size: 1.35rem;
+  color: var(--nb-chalk);
+}
+.nb-chapter-n span {
+  font-family: var(--font-serif), serif;
+  font-style: normal;
+  margin-right: 0.4rem;
+  color: var(--nb-sepia);
+}
+.nb-chapter-title {
+  margin-top: 0.5rem;
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 700;
+  font-size: clamp(3.25rem, 9vw, 7.5rem);
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+}
+.nb-chapter-title em {
+  font-family: var(--font-serif), serif;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+.nb-chapter-lead {
+  margin-top: 1.5rem;
+  font-family: var(--font-serif), serif;
+  font-size: clamp(1.5rem, 2.6vw, 2.1rem);
+  line-height: 1.15;
+}
+.nb-chapter-body {
+  margin-top: 1rem;
+  max-width: 34rem;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: #4a3a29;
+}
+
+.nb-chapter-plate {
+  position: relative;
+  aspect-ratio: 5 / 4;
+  width: 100%;
+}
+.nb-chapter-plate .nb-layer { inset: 0; }
+.nb-plate-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
+.nb-plate-study { position: absolute; inset: 8%; width: 84%; height: 84%; overflow: visible; }
+
+.nb-closing {
+  padding: 8rem 1rem 9rem;
+  text-align: center;
+}
+.nb-closing .nb-chapter-body { margin-left: auto; margin-right: auto; }
+.nb-cta-lg {
+  display: inline-flex;
+  margin: 0;
+  padding: 0.85rem 1.6rem;
+  font-size: 0.95rem;
+}
+.nb-cta-ghost {
+  color: var(--nb-ink);
+  background: transparent;
+  border: 1px solid var(--nb-ink);
+}
+.nb-cta-ghost:hover { color: var(--nb-paper); }
+
+/* Chapters fade up as they scroll into view, where supported */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .nb-chapter-text, .nb-chapter-plate {
+      animation: nb-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+  }
+}
+@keyframes nb-rise { from { opacity: 0; transform: translateY(40px); } }
+
+.nb-footer {
+  color: #2b2118;
+  background: #e6d7b6;
+  border-top: 1px solid rgba(110, 82, 53, 0.3);
+}
+.nb-footer a[aria-label="RiskLens home"] { color: #2b2118; }
