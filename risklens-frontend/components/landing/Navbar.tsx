@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Logo from "@/components/ui/Logo";
-import { buttonStyles } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
 /**
@@ -48,7 +47,10 @@ export default function Navbar() {
                     >
                         Sign in
                     </Link>
-                    <Link href="/signup" className={buttonStyles({ size: "sm" })}>
+                    <Link
+                        href="/signup"
+                        className="inline-flex h-8 items-center px-4 rounded-full text-xs font-semibold bg-[#2b2118] text-[#f7f0de] hover:bg-[#a4442c] transition-colors"
+                    >
                         Get started
                     </Link>
                 </nav>

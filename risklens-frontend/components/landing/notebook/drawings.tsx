@@ -338,28 +338,35 @@ export function SealedLetter() {
     );
 }
 
-/* ---------- The anachronism: a modern phone ---------- */
+/* ---------- The anachronism: a modern phone, sketched in ink ---------- */
 
 export function Phone() {
     return (
         <g>
-            <rect x="-6" y="10" width="156" height="300" rx="26" fill="rgba(43,33,24,0.28)" filter="blur(10px)" />
-            <rect x="0" y="0" width="150" height="300" rx="24" fill="#111" />
-            <rect x="7" y="7" width="136" height="286" rx="18" fill="#0e1726" />
-            <rect x="56" y="14" width="38" height="9" rx="4.5" fill="#000" />
-            <text x="20" y="62" className="nb-phone-label">Overall risk</text>
-            <text x="20" y="104" className="nb-phone-score">2.57</text>
-            <text x="94" y="104" className="nb-phone-label">/ 5</text>
-            <rect x="20" y="122" width="110" height="7" rx="3.5" fill="#22324a" />
-            <rect x="20" y="122" width="57" height="7" rx="3.5" fill="#fab219" />
-            {[[150, 82], [166, 46], [182, 64]].map(([y, w]) => (
-                <g key={y}>
-                    <rect x="20" y={y} width="110" height="5" rx="2.5" fill="#22324a" />
-                    <rect x="20" y={y} width={w} height="5" rx="2.5" fill="#3987e5" />
-                </g>
-            ))}
-            <rect x="20" y="236" width="110" height="34" rx="10" fill="#2a78d6" />
-            <text x="75" y="258" textAnchor="middle" className="nb-phone-cta">Analyze</text>
+            {/* Hatched shadow, offset like a drawn cast shadow */}
+            <rect x="12" y="14" width="150" height="300" rx="24" fill="url(#nb-hatch)" opacity="0.55" />
+            <g filter="url(#nb-ink)" stroke="var(--nb-ink)" fill="none">
+                <rect x="0" y="0" width="150" height="300" rx="24" fill="var(--nb-paper)" strokeWidth="1.8" />
+                <rect x="9" y="9" width="132" height="282" rx="17" strokeWidth="0.9" />
+                <rect x="58" y="16" width="34" height="8" rx="4" fill="var(--nb-ink)" stroke="none" />
+                <path d="M-1 70v26M151 82v40" strokeWidth="2.2" strokeLinecap="round" />
+                {/* Risk meter: a track with the moderate share filled in red chalk */}
+                <path d="M22 128h106" strokeWidth="5" strokeLinecap="round" stroke="var(--nb-line)" opacity="0.6" />
+                <path d="M22 128h55" strokeWidth="5" strokeLinecap="round" stroke="var(--nb-chalk)" />
+                {/* Share of risk per holding, as inked bars */}
+                {[[156, 82], [172, 46], [188, 64]].map(([y, w]) => (
+                    <g key={y}>
+                        <path d={`M22 ${y}h106`} strokeWidth="1" stroke="var(--nb-line)" />
+                        <path d={`M22 ${y}h${w}`} strokeWidth="3" strokeLinecap="round" stroke="var(--nb-sepia)" />
+                    </g>
+                ))}
+                <rect x="22" y="238" width="106" height="32" rx="16" fill="var(--nb-ink)" stroke="none" />
+            </g>
+            <text x="22" y="64" className="nb-phone-label">overall risk</text>
+            <text x="20" y="108" className="nb-phone-score">2.57</text>
+            <text x="98" y="108" className="nb-phone-label">/ 5</text>
+            <text x="75" y="259" textAnchor="middle" className="nb-phone-cta">Analyze</text>
+            <text x="18" y="-18" className="nb-note-sm">strumento del futuro</text>
         </g>
     );
 }

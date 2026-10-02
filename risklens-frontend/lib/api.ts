@@ -61,7 +61,9 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       removeToken();
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      // Only signed-in pages need to bounce to login; public pages (the
+      // landing page) just carry on signed out.
+      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
         window.location.href = "/login";
       }
     }

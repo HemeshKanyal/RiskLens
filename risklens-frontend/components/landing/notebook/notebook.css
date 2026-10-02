@@ -84,9 +84,9 @@
 .nb-chalk-text { fill: var(--nb-chalk); }
 .nb-numeral { font-family: var(--ff-serif), serif; font-size: 22px; fill: var(--nb-sepia); }
 .nb-mirror { transform-box: fill-box; transform-origin: center; transform: scaleX(-1); }
-.nb-phone-label { font-family: var(--font-inter), sans-serif; font-size: 11px; fill: #9fb3cf; }
-.nb-phone-score { font-family: var(--font-inter), sans-serif; font-size: 40px; font-weight: 600; fill: #fff; letter-spacing: -1px; }
-.nb-phone-cta { font-family: var(--font-inter), sans-serif; font-size: 13px; font-weight: 600; fill: #fff; }
+.nb-phone-label { font-family: var(--ff-fell), serif; font-style: italic; font-size: 14px; fill: var(--nb-sepia); }
+.nb-phone-score { font-family: var(--ff-serif), serif; font-size: 46px; fill: var(--nb-ink); letter-spacing: -1px; }
+.nb-phone-cta { font-family: var(--font-inter), sans-serif; font-size: 13px; font-weight: 600; fill: var(--nb-paper); }
 
 /* Cover box: same geometry as an SVG with viewBox 1600×900 and "slice" */
 .nb-cover {
