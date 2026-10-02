@@ -77,7 +77,7 @@ export default function AnalysisProgress({
                 ) : (
                     <Loader2 className="w-5 h-5 text-accent animate-spin" />
                 )}
-                <h3 className="text-sm font-semibold text-fg">{title}</h3>
+                <h3 className="font-serif text-xl leading-tight text-fg">{title}</h3>
                 {isRunning && (
                     <span className="ml-auto text-xs text-muted tabular-nums">
                         {formatElapsed(elapsed)}

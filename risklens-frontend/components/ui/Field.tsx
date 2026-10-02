@@ -4,7 +4,7 @@ import React, { useId } from "react";
 import { cn } from "@/lib/cn";
 
 const control =
-    "w-full h-10 px-3 rounded-lg bg-surface border border-line-strong text-sm text-fg placeholder:text-muted " +
+    "w-full h-10 px-3 rounded-md bg-surface border border-line-strong text-sm text-fg placeholder:text-muted " +
     "outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent-soft " +
     "disabled:opacity-50 aria-[invalid=true]:border-negative";
 

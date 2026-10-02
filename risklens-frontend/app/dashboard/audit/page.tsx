@@ -6,6 +6,7 @@ import { Activity } from "lucide-react";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge, { type Tone } from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import Stat from "@/components/ui/Stat";
 import EmptyState from "@/components/ui/EmptyState";
 import { buttonStyles } from "@/components/ui/Button";
@@ -39,6 +40,8 @@ export default function AuditPage() {
     return (
         <div className="max-w-5xl mx-auto space-y-6">
             <PageHeader
+                numeral={APP_CHAPTERS.patterns.numeral}
+                caption={APP_CHAPTERS.patterns.caption}
                 title="Decision patterns"
                 description="How you've responded to suggestions. This only tailors future explanations; it never changes a risk score."
             />

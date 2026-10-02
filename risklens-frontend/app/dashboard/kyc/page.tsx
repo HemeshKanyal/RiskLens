@@ -6,6 +6,7 @@ import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import PageHeader from "@/components/ui/PageHeader";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import { Field, Input } from "@/components/ui/Field";
 import { verifyKYC, extractError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -87,6 +88,8 @@ export default function KYCPage() {
     return (
         <div className="max-w-2xl mx-auto space-y-6">
             <PageHeader
+                numeral={APP_CHAPTERS.identity.numeral}
+                caption={APP_CHAPTERS.identity.caption}
                 title="Identity check"
                 description="Prove you're 18+ and not from a restricted country, without sharing your details."
             />

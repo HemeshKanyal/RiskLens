@@ -1,7 +1,6 @@
 import Link from "next/link";
 import React from "react";
 import ParallaxScene, { Depth } from "./ParallaxScene";
-import { serif, fell } from "./Hero";
 import { Plate, Stones, BellCurve, Constellation, Drawdown, SealedLetter } from "./drawings";
 
 interface Chapter {
@@ -93,7 +92,7 @@ function ChapterPage({ chapter, flip }: { chapter: Chapter; flip: boolean }) {
 
 export default function Chapters() {
     return (
-        <div className={`nb-book ${serif.variable} ${fell.variable}`}>
+        <div className="nb-book">
             {CHAPTERS.map((c, i) => (
                 <ChapterPage key={c.id} chapter={c} flip={i % 2 === 1} />
             ))}

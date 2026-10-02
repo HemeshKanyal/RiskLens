@@ -1,13 +1,8 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { inter, serif, fell } from "@/lib/fonts";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/lib/auth-context";
-
-const inter = Inter({
-    subsets: ["latin"],
-    variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
     title: { default: "RiskLens", template: "%s · RiskLens" },
@@ -16,14 +11,14 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
     themeColor: [
-        { media: "(prefers-color-scheme: light)", color: "#f6f6f4" },
-        { media: "(prefers-color-scheme: dark)", color: "#0e0e0d" },
+        { media: "(prefers-color-scheme: light)", color: "#efe3c8" },
+        { media: "(prefers-color-scheme: dark)", color: "#15110c" },
     ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en" className={inter.variable}>
+        <html lang="en" className={`${inter.variable} ${serif.variable} ${fell.variable}`}>
             <body>
                 <AuthProvider>
                     {children}

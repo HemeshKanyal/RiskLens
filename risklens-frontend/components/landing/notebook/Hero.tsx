@@ -1,10 +1,7 @@
 import Link from "next/link";
-import { Instrument_Serif, IM_Fell_English } from "next/font/google";
 import ParallaxScene, { Depth } from "./ParallaxScene";
 import { InkDefs, ConstructionLayer, LensLayer, StudiesBack, StudiesStars, StudiesNotes, StudiesPhone } from "./drawings";
 
-export const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["normal", "italic"], variable: "--font-serif" });
-export const fell = IM_Fell_English({ subsets: ["latin"], weight: "400", style: ["normal", "italic"], variable: "--font-fell" });
 
 export const CHAPTERS = [
     { n: "I", id: "allocation", title: "Allocation" },
@@ -16,7 +13,7 @@ export const CHAPTERS = [
 
 export default function Hero() {
     return (
-        <section className={`nb ${serif.variable} ${fell.variable}`} aria-labelledby="hero-title">
+        <section className="nb" aria-labelledby="hero-title">
             <InkDefs />
             <ParallaxScene className="nb-stage">
                 <div className="nb-paper" aria-hidden="true" />

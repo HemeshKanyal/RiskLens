@@ -3,44 +3,25 @@
 import React, { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-    LayoutDashboard,
-    PlusCircle,
-    LineChart,
-    History,
-    Activity,
-    BadgeCheck,
-    Settings,
-    LogOut,
-    X,
-} from "lucide-react";
+import { LogOut, X } from "lucide-react";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import { useAuth } from "@/lib/auth-context";
 import Logo from "@/components/ui/Logo";
 import { cn } from "@/lib/cn";
 
-const NAV = [
-    { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
-    { label: "New analysis", href: "/dashboard/portfolio", icon: PlusCircle },
-    { label: "Trends & stress tests", href: "/dashboard/analytics", icon: LineChart },
-    { label: "History", href: "/dashboard/history", icon: History },
-    { label: "Decision patterns", href: "/dashboard/audit", icon: Activity },
-];
-
-const ACCOUNT_NAV = [
-    { label: "Identity check", href: "/dashboard/kyc", icon: BadgeCheck },
-    { label: "Settings", href: "/dashboard/settings", icon: Settings },
-];
+const NAV = [APP_CHAPTERS.overview, APP_CHAPTERS.analysis, APP_CHAPTERS.trends, APP_CHAPTERS.history, APP_CHAPTERS.patterns];
+const ACCOUNT_NAV = [APP_CHAPTERS.identity, APP_CHAPTERS.settings];
 
 function NavLink({
     href,
     label,
-    icon: Icon,
+    numeral,
     active,
     onNavigate,
 }: {
     href: string;
     label: string;
-    icon: React.ComponentType<{ className?: string }>;
+    numeral: string;
     active: boolean;
     onNavigate: () => void;
 }) {
@@ -50,12 +31,20 @@ function NavLink({
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-                "flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-sm transition-colors",
-                active ? "bg-surface-2 text-fg font-medium" : "text-fg-2 hover:text-fg hover:bg-surface-2"
+                "group relative flex items-baseline justify-between gap-3 py-1.5 pl-4 pr-2 rounded-md text-[15px] transition-colors",
+                active ? "text-fg font-semibold" : "text-fg-2 hover:text-fg"
             )}
         >
-            <Icon className={cn("w-4 h-4 shrink-0", active ? "text-accent" : "text-muted")} />
-            {label}
+            {/* A red-chalk mark beside the current chapter */}
+            <span
+                className={cn(
+                    "absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-accent transition-opacity",
+                    active ? "opacity-100" : "opacity-0 group-hover:opacity-30"
+                )}
+                aria-hidden="true"
+            />
+            <span className="group-hover:underline underline-offset-4 decoration-line-strong">{label}</span>
+            <span className={cn("font-serif text-sm", active ? "text-accent-text" : "text-muted")}>{numeral}</span>
         </Link>
     );
 }
@@ -107,14 +96,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                     </button>
                 </div>
 
-                <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-                    <div className="space-y-0.5">
+                <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
+                    <div>
+                        <p className="px-4 pb-2 font-fell italic text-sm text-muted">Indice</p>
                         {NAV.map((item) => (
                             <NavLink key={item.href} {...item} active={isActive(item.href)} onNavigate={onClose} />
                         ))}
                     </div>
-                    <div className="space-y-0.5">
-                        <p className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted">Account</p>
+                    <div>
+                        <p className="px-4 pb-2 font-fell italic text-sm text-muted">Il tuo conto</p>
                         {ACCOUNT_NAV.map((item) => (
                             <NavLink key={item.href} {...item} active={isActive(item.href)} onNavigate={onClose} />
                         ))}
@@ -122,7 +112,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                 </nav>
 
                 <div className="px-3 py-3 border-t border-line flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-surface-2 text-fg-2 flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
+                    <div className="w-8 h-8 rounded-full border border-line-strong text-fg-2 flex items-center justify-center font-serif text-base shrink-0" aria-hidden="true">
                         {(user?.full_name || "U").charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">

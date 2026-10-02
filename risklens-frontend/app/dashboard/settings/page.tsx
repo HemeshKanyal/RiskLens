@@ -4,6 +4,7 @@ import React from "react";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import { useAuth } from "@/lib/auth-context";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -20,7 +21,9 @@ export default function SettingsPage() {
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
-            <PageHeader title="Settings" description="Your account details." />
+            <PageHeader
+                numeral={APP_CHAPTERS.settings.numeral}
+                caption={APP_CHAPTERS.settings.caption} title="Settings" description="Your account details." />
 
             <Card>
                 <CardHeader title="Profile" />

@@ -51,8 +51,8 @@ function ScoreComponent({
 function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
     return (
         <div className="min-w-0">
-            <p className="text-xs text-muted">{label}</p>
-            <p className="mt-1 text-lg font-semibold tracking-tight text-fg truncate">{value}</p>
+            <p className="font-fell italic text-[15px] text-muted">{label}</p>
+            <p className="mt-0.5 text-2xl font-semibold tracking-tight text-fg truncate">{value}</p>
             {hint && <p className="text-xs text-muted">{hint}</p>}
         </div>
     );
@@ -130,7 +130,7 @@ export default function AnalysisResults({
                         />
                     </div>
                     <div className="mt-6">
-                        <p className="text-xs font-medium text-muted mb-2">Allocation by asset class</p>
+                        <p className="font-fell italic text-[15px] text-muted mb-2">Allocation by asset class</p>
                         <AllocationBar weights={view.classWeights} />
                     </div>
                 </Card>
@@ -181,7 +181,7 @@ export default function AnalysisResults({
 
             {livePrices && Object.keys(livePrices).length > 0 && (
                 <Card>
-                    <h3 className="text-xs font-medium text-muted mb-2">Live prices used</h3>
+                    <h3 className="font-fell italic text-[15px] text-muted mb-2">Live prices used</h3>
                     <ul className="flex flex-wrap gap-2">
                         {Object.entries(livePrices).map(([symbol, price]) => (
                             <li key={symbol} className="text-xs px-2 py-1 rounded-md bg-surface-2">

@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import PageHeader from "@/components/ui/PageHeader";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import EmptyState from "@/components/ui/EmptyState";
 import { Select } from "@/components/ui/Field";
@@ -111,6 +112,8 @@ export default function PortfolioPage() {
     return (
         <div className="max-w-6xl mx-auto space-y-6">
             <PageHeader
+                numeral={APP_CHAPTERS.analysis.numeral}
+                caption={APP_CHAPTERS.analysis.caption}
                 title="New analysis"
                 description="Enter your holdings to get a risk and diversification breakdown."
             />

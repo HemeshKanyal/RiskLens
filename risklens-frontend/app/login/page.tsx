@@ -36,6 +36,7 @@ export default function LoginPage() {
 
     return (
         <AuthShell
+            caption="Bentornato"
             title="Sign in"
             description="Welcome back to RiskLens."
             footer={

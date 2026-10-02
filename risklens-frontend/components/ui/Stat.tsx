@@ -15,7 +15,7 @@ export default function Stat({
 }) {
     return (
         <Card className="min-w-0">
-            <p className="text-xs font-medium text-muted">{label}</p>
+            <p className="font-fell italic text-sm text-muted">{label}</p>
             {isLoading ? (
                 <div className="mt-2 space-y-2">
                     <Skeleton className="h-7 w-28" />
@@ -23,7 +23,7 @@ export default function Stat({
                 </div>
             ) : (
                 <>
-                    <div className="mt-1.5 text-2xl font-semibold tracking-tight text-fg truncate">{value}</div>
+                    <div className="mt-1 text-3xl font-semibold tracking-tight text-fg truncate">{value}</div>
                     {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
                 </>
             )}

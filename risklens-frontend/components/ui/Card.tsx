@@ -9,7 +9,11 @@ interface CardProps extends React.HTMLAttributes<HTMLElement> {
 export default function Card({ as: Tag = "section", padded = true, className, ...props }: CardProps) {
     return (
         <Tag
-            className={cn("bg-surface border border-line rounded-xl", padded && "p-5 sm:p-6", className)}
+            className={cn(
+                "bg-surface border border-line rounded-md shadow-[0_1px_0_var(--line)]",
+                padded && "p-5 sm:p-6",
+                className
+            )}
             {...props}
         />
     );
@@ -29,7 +33,7 @@ export function CardHeader({
     return (
         <div className={cn("flex items-start justify-between gap-4 mb-5", className)}>
             <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-fg">{title}</h2>
+                <h2 className="font-serif text-xl leading-tight text-fg">{title}</h2>
                 {description && <p className="text-xs text-muted mt-1">{description}</p>}
             </div>
             {action && <div className="shrink-0">{action}</div>}

@@ -51,6 +51,7 @@ export default function SignupPage() {
 
     return (
         <AuthShell
+            caption="Un nuovo quaderno"
             title="Create your account"
             description="Analyze portfolio risk in a couple of minutes."
             footer={

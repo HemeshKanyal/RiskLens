@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2, LineChart as LineChartIcon } from "lucide-react";
 import Card, { CardHeader } from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import Button, { buttonStyles } from "@/components/ui/Button";
@@ -14,7 +15,7 @@ import { snapshotValue } from "@/components/dashboard/RecentSnapshots";
 import { getPortfolioHistory, getDecisionLogs, runBacktest, extractError } from "@/lib/api";
 import { RISK_THRESHOLDS } from "@/lib/analysis";
 import type { PortfolioSnapshot, DecisionLog, BacktestResponse } from "@/lib/types";
-import { formatCompactCurrency, formatCurrency, formatDate, formatPercent } from "@/lib/utils";
+import { formatCompactCurrency, formatCurrency, formatDate, formatPercent, parseServerDate } from "@/lib/utils";
 
 // Must match STRESS_EVENTS in ai_phase2/backtest_engine.py
 const STRESS_EVENTS = [
@@ -126,6 +127,18 @@ function StressTest({ portfolio }: { portfolio: PortfolioSnapshot }) {
     );
 }
 
+// Label points by date, adding the time when several fall on the same day
+function withReadableDates(points: { at: string; value: number }[]) {
+    const days = points.map((p) => formatDate(p.at));
+    const repeated = new Set(days.filter((d, i) => days.indexOf(d) !== i));
+    return points.map((p, i) => ({
+        value: p.value,
+        date: repeated.has(days[i])
+            ? `${days[i]}, ${parseServerDate(p.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+            : days[i],
+    }));
+}
+
 export default function AnalyticsPage() {
     const [portfolios, setPortfolios] = useState<PortfolioSnapshot[]>([]);
     const [decisions, setDecisions] = useState<DecisionLog[]>([]);
@@ -142,15 +155,19 @@ export default function AnalyticsPage() {
             .finally(() => setIsLoading(false));
     }, []);
 
-    const valueData = [...portfolios].reverse().map((p) => ({ date: formatDate(p.created_at), value: snapshotValue(p) }));
-    const riskData = decisions
-        .filter((d) => d.action === "portfolio_analysis" && d.ai_analysis)
-        .reverse()
-        .map((d) => ({ date: formatDate(d.created_at), value: d.ai_analysis!.risk.risk_score }));
+    const valueData = withReadableDates([...portfolios].reverse().map((p) => ({ at: p.created_at, value: snapshotValue(p) })));
+    const riskData = withReadableDates(
+        decisions
+            .filter((d) => d.action === "portfolio_analysis" && d.ai_analysis)
+            .reverse()
+            .map((d) => ({ at: d.created_at, value: d.ai_analysis!.risk.risk_score }))
+    );
 
     return (
         <div className="max-w-5xl mx-auto space-y-6">
-            <PageHeader title="Trends & stress tests" description="How your saved analyses have changed, and how your holdings hold up in a crisis." />
+            <PageHeader
+                numeral={APP_CHAPTERS.trends.numeral}
+                caption={APP_CHAPTERS.trends.caption} title="Trends & stress tests" description="How your saved analyses have changed, and how your holdings hold up in a crisis." />
 
             {loadError && (
                 <p role="alert" className="px-4 py-3 rounded-lg bg-negative-soft text-sm text-negative-text">

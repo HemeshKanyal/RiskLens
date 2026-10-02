@@ -5,10 +5,10 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
-    primary: "bg-accent-solid text-white hover:bg-accent-solid-hover",
-    secondary: "bg-surface border border-line-strong text-fg hover:bg-surface-2",
+    primary: "bg-accent-solid text-on-accent hover:bg-accent-solid-hover",
+    secondary: "border border-line-strong text-fg hover:bg-surface-2",
     ghost: "text-fg-2 hover:text-fg hover:bg-surface-2",
-    danger: "bg-surface border border-line-strong text-negative-text hover:bg-negative-soft",
+    danger: "border border-line-strong text-negative-text hover:bg-negative-soft",
 };
 
 const sizes: Record<Size, string> = {
@@ -23,7 +23,7 @@ export function buttonStyles({
     className,
 }: { variant?: Variant; size?: Size; className?: string } = {}) {
     return cn(
-        "inline-flex items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer",
+        "inline-flex items-center justify-center rounded-full font-medium whitespace-nowrap transition-colors cursor-pointer",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         variants[variant],
         sizes[size],

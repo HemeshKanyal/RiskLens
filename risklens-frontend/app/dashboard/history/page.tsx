@@ -6,6 +6,7 @@ import { ChevronDown, History } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import SegmentedControl from "@/components/ui/SegmentedControl";
@@ -40,12 +41,12 @@ function DecisionDetails({ decision }: { decision: DecisionLog }) {
                     <div className="space-y-5">
                         <RiskMeter score={view.score} level={view.level} size="sm" />
                         <div>
-                            <p className="text-xs font-medium text-muted mb-2">Allocation</p>
+                            <p className="font-fell italic text-[15px] text-muted mb-2">Allocation</p>
                             <AllocationBar weights={view.classWeights} />
                         </div>
                     </div>
                     <div className="min-w-0">
-                        <p className="text-xs font-medium text-muted mb-2">Findings</p>
+                        <p className="font-fell italic text-[15px] text-muted mb-2">Findings</p>
                         <Findings findings={view.findings} limit={4} />
                     </div>
                 </div>
@@ -53,7 +54,7 @@ function DecisionDetails({ decision }: { decision: DecisionLog }) {
 
             {decision.llm_explanation && (
                 <div>
-                    <p className="text-xs font-medium text-muted mb-1.5">Written explanation</p>
+                    <p className="font-fell italic text-[15px] text-muted mb-1.5">Written explanation</p>
                     <p className="text-sm text-fg-2 leading-relaxed whitespace-pre-wrap">{decision.llm_explanation}</p>
                 </div>
             )}
@@ -88,7 +89,9 @@ export default function HistoryPage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            <PageHeader title="History" description="Every saved analysis and identity check, newest first." />
+            <PageHeader
+                numeral={APP_CHAPTERS.history.numeral}
+                caption={APP_CHAPTERS.history.caption} title="History" description="Every saved analysis and identity check, newest first." />
 
             {decisions.length > 0 && (
                 <SegmentedControl<Filter>
@@ -144,7 +147,7 @@ export default function HistoryPage() {
                                         className="w-full flex items-center gap-3 px-5 py-4 sm:px-6 text-left"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-fg">
+                                            <p className="font-serif text-xl leading-tight text-fg">
                                                 {isAnalysis ? "Portfolio analysis" : "Identity check"}
                                             </p>
                                             <p className="text-xs text-muted mt-0.5">

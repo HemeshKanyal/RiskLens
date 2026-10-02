@@ -6,6 +6,7 @@ import { FileSpreadsheet, FileText, LineChart } from "lucide-react";
 import toast from "react-hot-toast";
 import Card, { CardHeader } from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
+import { APP_CHAPTERS } from "@/lib/chapters";
 import Stat from "@/components/ui/Stat";
 import Button, { buttonStyles } from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
@@ -62,6 +63,8 @@ export default function DashboardPage() {
     return (
         <div className="max-w-6xl mx-auto space-y-6">
             <PageHeader
+                numeral={APP_CHAPTERS.overview.numeral}
+                caption={APP_CHAPTERS.overview.caption}
                 title="Overview"
                 description={hasData ? "Your latest analysis and saved snapshots." : undefined}
                 actions={
@@ -148,7 +151,7 @@ export default function DashboardPage() {
                                 <div className="grid gap-6 md:grid-cols-[minmax(0,14rem)_1fr]">
                                     <RiskMeter score={view.score} level={view.level} size="sm" />
                                     <div className="min-w-0">
-                                        <p className="text-xs font-medium text-muted mb-2">Top findings</p>
+                                        <p className="font-fell italic text-[15px] text-muted mb-2">Top findings</p>
                                         <Findings findings={view.findings} limit={3} expandable={false} />
                                     </div>
                                 </div>
