@@ -1,0 +1,29 @@
+# Render Blueprint for the RiskLens API (free plan).
+# In Render: New → Blueprint → pick this repo. Values marked `sync: false`
+# are asked for once in the dashboard and are never stored in the repo.
+services:
+  - type: web
+    name: risklens-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "120"
+      - key: MONGODB_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-flash-latest
+      - key: GEMINI_FALLBACK_MODEL
+        value: gemini-flash-lite-latest

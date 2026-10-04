@@ -11,7 +11,11 @@ check() { # name command hint
 }
 echo "Checking services:"
 check "MongoDB on :27017" "(exec 3<>/dev/tcp/127.0.0.1/27017)" "start it: docker start risklens-mongo"
-check "Ollama on :11434" "curl -sf http://127.0.0.1:11434/api/tags" "start it: sudo systemctl start ollama (explanations will be skipped)"
+if grep -q "^LLM_PROVIDER=gemini" "$ROOT/backend/.env" 2>/dev/null; then
+  echo "  ✓ Language model: Gemini (from backend/.env)"
+else
+  check "Ollama on :11434" "curl -sf http://127.0.0.1:11434/api/tags" "start it: sudo systemctl start ollama (explanations will be skipped)"
+fi
 check "bb (proof verifier)" "command -v bb" "install with bbup (identity checks will fail)"
 
 # Stop everything this script started (whole process group) on exit / Ctrl+C

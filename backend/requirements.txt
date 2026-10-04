@@ -1,16 +1,26 @@
-fastapi
-uvicorn
-python-jose
-passlib[bcrypt]
-pydantic
-pymongo
-motor
-python-dotenv
-requests
-google-genai
-google-auth
-python-multipart
-yfinance
-pandas
-numpy
-fpdf2
+# Pinned to the versions tested with Python 3.12–3.14. Update deliberately.
+fastapi==0.142.2
+uvicorn==0.54.0
+pydantic==2.13.5
+python-multipart==0.0.32
+python-dotenv==1.2.3
+requests==2.34.2
+
+# Auth
+python-jose==3.5.0
+bcrypt==5.0.0
+google-auth==2.59.1
+
+# Database
+motor==3.7.1
+pymongo==4.18.2
+
+# Analysis
+yfinance==1.7.0
+pandas==3.0.6
+numpy==2.5.3
+
+# Explanations, screenshot import, exports
+google-genai==2.26.0
+pillow==12.3.0
+fpdf2==2.8.9

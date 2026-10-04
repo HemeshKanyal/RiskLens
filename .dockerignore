@@ -1,0 +1,16 @@
+# Only the backend, the analysis engine and the circuit's verification key
+# go into the API image.
+.git
+risklens-frontend
+scripts
+**/node_modules
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+!backend/.env.example
+ai_phase2/.cache
+zk/*/target
+*.md

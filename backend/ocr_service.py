@@ -1,20 +1,16 @@
 """
 RiskLens — Portfolio Screenshot OCR Service
-Uses Ollama vision model (llava) to extract portfolio data from screenshots.
+Uses a vision model (see llm_client) to extract portfolio data from screenshots.
 """
 
-import base64
-import os
 import json
 import logging
-import requests
 import io
 from PIL import Image
 
-logger = logging.getLogger("risklens.ocr")
+import llm_client
 
-OLLAMA_BASE = os.getenv("OLLAMA_URL", "http://localhost:11434")
-VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "moondream")  # small enough for ~4 GB VRAM
+logger = logging.getLogger("risklens.ocr")
 
 
 EXTRACTION_PROMPT = """Extract all investment holdings from this screenshot into a JSON list.
@@ -36,8 +32,7 @@ Return ONLY the JSON object.
 
 def parse_screenshots(images_bytes: list[bytes]) -> dict:
     """
-    Process multiple portfolio screenshots by sending them to Ollama iteratively.
-    Switched to moondream model for higher stability on 4GB VRAM systems.
+    Process multiple portfolio screenshots one at a time with the vision model.
     """
     all_assets_lists = []
     all_notes = []
@@ -52,32 +47,10 @@ def parse_screenshots(images_bytes: list[bytes]) -> dict:
             # 1. Preprocess/Resize image to avoid OOM
             processed_bytes = _preprocess_image(img_bytes)
             
-            # 2. Encode to base64
-            image_b64 = base64.b64encode(processed_bytes).decode("utf-8")
+            # 2. Ask the vision model (Ollama locally, Gemini in production)
+            raw_text = llm_client.generate_from_image(EXTRACTION_PROMPT, processed_bytes).strip()
 
-            # 3. Call Ollama
-            response = requests.post(
-                f"{OLLAMA_BASE}/api/generate",
-                json={
-                    "model": VISION_MODEL,
-                    "prompt": EXTRACTION_PROMPT,
-                    "images": [image_b64],
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,
-                    }
-                },
-                timeout=120
-            )
-
-            if response.status_code != 200:
-                logger.error("Ollama failed for image %d: %s", i + 1, response.text)
-                continue
-
-            # 3. Parse and Validate this single result
-            data = response.json()
-            raw_text = data.get("response", "").strip()
-            
+            # 3. Parse and validate this single result
             logger.info("Raw OCR response (first 200 chars): %s", raw_text[:200])
             
             parsed_json = _extract_json(raw_text)

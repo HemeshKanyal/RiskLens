@@ -1,13 +1,10 @@
-import os
 import re
-import requests
 import logging
 import json
 
-logger = logging.getLogger("risklens.llm")
+import llm_client
 
-OLLAMA_BASE = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+logger = logging.getLogger("risklens.llm")
 
 
 def _trim_analysis(ai_result):
@@ -43,7 +40,7 @@ def _trim_analysis(ai_result):
             # Plain names so the model doesn't echo internal "Phase" jargon
             "asset_class_mix_score": risk.get("phase1_score"),
             "market_behaviour_score": risk.get("phase2_score"),
-            "total_value_usd": summary.get("total_value"),
+            "total_value_usd": round(summary["total_value"]) if summary.get("total_value") else None,
             "allocation_by_asset_class_pct": summary.get("class_allocations_percent"),
             "holdings": holdings,
             "suggested_changes": [
@@ -148,24 +145,10 @@ Analysis data:
 """
 
     try:
-        logger.info("Requesting LLM explanation from Ollama...")
-        response = requests.post(
-            f"{OLLAMA_BASE}/api/generate",
-            json={
-                "model": OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "num_predict": 512,  # Limit output tokens for speed
-                    "temperature": 0.3,
-                }
-            },
-            timeout=300
-        )
-
-        result = response.json()
+        logger.info("Requesting LLM explanation (%s)...", llm_client.PROVIDER)
+        text = llm_client.generate_text(prompt, temperature=0.3)
         logger.info("LLM explanation generated successfully")
-        return _strip_markdown(result["response"])
+        return _strip_markdown(text)
 
     except Exception as e:
         logger.warning("LLM generation failed: %s", str(e))
