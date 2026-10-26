@@ -105,4 +105,4 @@ docs/               CODEBASE.md: how the code fits together
   (for example an e-passport chip) as the circuit's input.
 - Explanations come from a language model and can be wrong; the computed
   figures shown alongside are the source of truth.
-- Market data comes from Yahoo Finance via yfinance and can be delayed or missing.
+- Market data comes from Yahoo Finance via yfinance and can be delayed or missing
